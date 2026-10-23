@@ -480,3 +480,7 @@ body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.o
 body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo); }
 .zona-auto.sopra-file { background: color-mix(in srgb, var(--accento) 18%, transparent); border-style: solid; }
 #lato .voce.sopra-file { outline: 2px solid var(--accento); outline-offset: -2px; }
+/* numero di versione modificabile nella lista (24/10) */
+.tr .ver-num { width: 44px; flex: none; padding: 1px 4px; margin-left: -4px; font-size: 13px; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.tr .ver-num:hover { background: rgba(255,255,255,.08); }
+.tr .ver-num:focus { background: var(--campo); color: var(--testo); }

@@ -332,6 +332,9 @@ function tracklist(brani, { multi = false, ordinabile = false } = {}) {
     <div class="tl-testa"><span>#</span><span>Titolo</span>${multi ? '<span class="prog">Progetto</span>' : ''}<span class="ver">Versione</span><span class="nasc">BPM</span><span class="nasc">Tonalità</span><span class="nasc2">Aggiunto</span><span></span><span class="dx">${IC.orologio}</span><span></span></div>
     ${brani.map((b, i) => rigaBrano(b, i, multi, ordinabile)).join('')}</div>`
 }
+// numero di versione scritto a mano: "4", "v4", "V 4" → "V4"; il resto resta com'è
+const etichettaVersione = t => { const m = t.trim().match(/^v?\s*(\d{1,3})$/i); return m ? 'V' + +m[1] : t.trim() }
+
 // stato della versione (DEMO ... MASTER): tendina colorata, si cambia al volo
 const STATI_UI = ['demo', 'prod', 'rec', 'premix', 'mix', 'master']
 const sceltaStato = (vid, stato) => vid ? `<select class="stato" data-s="${stato || ''}" data-stato-v="${vid}" title="Stato">
@@ -347,7 +350,7 @@ function rigaBrano(b, i, multi, ordinabile) {
     <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${b.audio ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
     <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><b>${esc(x.nome)}</b><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
-    <span class="ver">${esc(b.etichetta || '')}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
+    <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4">`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
     <span class="nasc ${b.tonalita ? '' : 'auto'}">${esc(keyDi(b))}</span>
     <span class="nasc2">${quando(b.creato)}</span>
@@ -1252,6 +1255,7 @@ document.addEventListener('drop', async e => {
 document.addEventListener('dragstart', e => {
   const r = e.target.closest?.('.tl.ordinabile .tr')
   if (!r) return
+  if (document.activeElement && document.activeElement.matches('.tr input')) { e.preventDefault(); return }  // si sta scrivendo la versione
   rigaTrascinata = r
   r.classList.add('trascinata')
   e.dataTransfer.effectAllowed = 'move'
@@ -1286,7 +1290,7 @@ $('#principale').addEventListener('drop', async e => {
 // su una riga: un clic seleziona, doppio clic suona (come Spotify); sul telefono basta un tocco
 document.addEventListener('dblclick', e => {
   const r = e.target.closest('.tr')
-  if (!r || e.target.closest('button, a, select')) return
+  if (!r || e.target.closest('button, a, select, input')) return
   const b = S.perBrano.get(+r.dataset.b)
   if (b.audio) suonaBrano(b.id)
   else scegliAudio(false, f => caricaVersione(b.id, f[0], b.versione_id))
@@ -1445,9 +1449,10 @@ document.addEventListener('change', async e => {
       let val = el.value.trim()
       if (el.dataset.versione === 'bpm') val = val ? parseFloat(val.replace(',', '.')) || null : null
       await api('PATCH', `/api/versioni/${S.pannOnda.vid}`, { [el.dataset.versione]: val || null })
-    } else if (el.matches('[data-etichetta]')) {
+    } else if (el.matches('[data-etichetta], [data-etichetta-v]')) {
       if (!el.value.trim()) return
-      await api('PATCH', `/api/versioni/${+el.closest('.ver-riga').dataset.v}`, { etichetta: el.value.trim() })
+      const vid = el.dataset.etichettaV ? +el.dataset.etichettaV : +el.closest('.ver-riga').dataset.v
+      await api('PATCH', `/api/versioni/${vid}`, { etichetta: etichettaVersione(el.value) })
     } else if (el.dataset.statoV) {
       el.dataset.s = el.value
       await api('PATCH', `/api/versioni/${+el.dataset.statoV}`, { stato: el.value || null })
