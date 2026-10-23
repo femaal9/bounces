@@ -442,6 +442,7 @@ function pagLibreria() {
   const tmp = document.createElement('div')
   disegnaLibreria(tmp)
   return `<div class="pagina sopra"><div class="sezione-t"><h2>La tua libreria</h2><button class="ic tondo-ic" data-az="crea">${IC.piu}</button></div>
+    <button class="zona-auto" data-az="carica-auto">${IC.piuCerchio}<span><b>Carica bounce</b><small>Li metto io nel progetto giusto, leggendo il nome</small></span></button>
     <div class="chips" style="margin-bottom:12px">${['progetti', 'autori', 'cartelle'].map(f =>
       `<button data-az="filtro" data-arg="${f}" class="${S.filtro === f ? 'on' : ''}">${f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>
     <nav>${tmp.innerHTML}</nav></div>`
