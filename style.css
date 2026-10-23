@@ -501,3 +501,11 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 .scelta:hover { background: #2e2e2e; }
 .scelta .cover { width: 40px; height: 40px; border-radius: 4px; flex: none; }
 .fondo-modale { display: flex; justify-content: flex-end; margin-top: 14px; }
+/* rinomina dalla lista (24/10): matita accanto al titolo, il titolo diventa un campo */
+.riga-titolo { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.riga-titolo b { min-width: 0; }
+.tr .matita { visibility: hidden; color: var(--tenue); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; flex: none; }
+.tr:hover .matita { visibility: visible; }
+.tr .matita:hover { color: var(--testo); background: rgba(255,255,255,.1); }
+.tr .matita svg { width: 14px; height: 14px; }
+.tr .rinomina { font-size: 15px; font-weight: 500; color: var(--testo); background: var(--campo); border-color: #535353; padding: 2px 6px; margin-left: -6px; width: 100%; }

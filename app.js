@@ -36,6 +36,7 @@ const IC = {
   orologio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   cartella: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>',
   pannello: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
+  matita: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   mano: '<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
 }
 
@@ -335,6 +336,33 @@ function tracklist(brani, { multi = false, ordinabile = false } = {}) {
     <div class="tl-testa"><span>#</span><span>Titolo</span>${multi ? '<span class="prog">Progetto</span>' : ''}<span class="ver">Versione</span><span class="nasc">BPM</span><span class="nasc">Tonalità</span><span class="nasc2">Aggiunto</span><span></span><span class="dx">${IC.orologio}</span><span></span></div>
     ${brani.map((b, i) => rigaBrano(b, i, multi, ordinabile)).join('')}</div>`
 }
+// rinominare un brano direttamente nella lista: il titolo diventa un campo (Invio salva, Esc annulla)
+function rinominaInRiga(bid) {
+  const r = $(`.tr[data-b="${bid}"]`), b = S.perBrano.get(bid)
+  if (!r || !b || $('input.rinomina', r)) return
+  const dove = $('.riga-titolo', r)
+  dove.innerHTML = `<input class="campo rinomina" value="${esc(b.titolo)}" spellcheck="false" title="Titolo (gli autori tra parentesi in fondo)">`
+  const campo = $('input', dove)
+  let fatto = false
+  const chiudi = async salva => {
+    if (fatto) return
+    fatto = true
+    const nuovo = campo.value.trim()
+    campo.blur()
+    if (salva && nuovo && nuovo !== b.titolo) {
+      try { await api('PATCH', `/api/brani/${bid}`, { titolo: nuovo }); avviso('Titolo cambiato') } catch (e) { sbaglio(e) }
+    }
+    ricarica()
+  }
+  campo.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chiudi(true) }
+    if (e.key === 'Escape') { e.stopPropagation(); chiudi(false) }
+  })
+  campo.addEventListener('blur', () => chiudi(true))
+  campo.focus()
+  campo.select()
+}
+
 // numero di versione scritto a mano: "4", "v4", "V 4" → "V4"; il resto resta com'è
 const etichettaVersione = t => { const m = t.trim().match(/^v?\s*(\d{1,3})$/i); return m ? 'V' + +m[1] : t.trim() }
 
@@ -351,7 +379,7 @@ function rigaBrano(b, i, multi, ordinabile) {
   if (b.audio && !S.ospite) Dbx.linkSubito(Archivio.percorso(b.versione_id))
   return `<div class="tr ${b.audio ? '' : 'muto'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
     <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${b.audio ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
-    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><b>${esc(x.nome)}</b><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
+    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
     <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4">`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
@@ -982,6 +1010,7 @@ function menuBrano(x, y, bid) {
   const b = S.perBrano.get(bid)
   menu(x, y, [
     ...(b.audio ? [{ testo: 'Riproduci', az: 'm-suona' }] : [{ testo: 'Carica l’audio', az: 'm-collega' }]),
+    { testo: 'Rinomina', az: 'm-rinomina' },
     { testo: 'Versioni, note e commenti', az: 'm-apri' },
     { testo: b.preferito ? 'Togli dai Preferiti' : 'Aggiungi ai Preferiti', az: 'm-cuore' },
     { testo: 'Nuova versione...', az: 'm-versione' },
@@ -1455,6 +1484,8 @@ document.addEventListener('click', async e => {
       // dal tasto destro su un brano
       case 'm-suona': return suonaBrano(mb.id)
       case 'm-apri': return apriBrano(mb.id, true)
+      case 'm-rinomina': return rinominaInRiga(mb.id)
+      case 'rinomina': return rinominaInRiga(bRiga.id)
       case 'm-cuore': return cuore(mb.id)
       case 'm-versione': return scegliAudio(false, f => caricaVersione(mb.id, f[0]))
       case 'm-collega': return scegliAudio(false, f => caricaVersione(mb.id, f[0], mb.versione_id))
