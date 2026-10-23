@@ -497,9 +497,9 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 .nuovo-prog input:focus { border-color: var(--testo); }
 .modale .sottotitolo { font-size: 12px; font-weight: 700; color: var(--tenue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
 .scelte { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; margin: 0 -6px; }
-.scelta { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 6px; text-align: left; font-weight: 600; }
-.scelta:hover { background: #2e2e2e; }
-.scelta .cover { width: 40px; height: 40px; border-radius: 4px; flex: none; }
+.scelta-prog { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 6px; text-align: left; font-weight: 600; }
+.scelta-prog:hover { background: #2e2e2e; }
+.scelta-prog .cover { width: 40px; height: 40px; border-radius: 4px; flex: none; }
 .fondo-modale { display: flex; justify-content: flex-end; margin-top: 14px; }
 /* rinomina dalla lista (24/10): matita accanto al titolo, il titolo diventa un campo */
 .riga-titolo { display: flex; align-items: center; gap: 6px; min-width: 0; }

@@ -1118,7 +1118,7 @@ function scegliDestinazione(files) {
       ${files.length > 1 ? `<ul>${files.slice(0, 5).map(f => `<li>${esc(f.name)}</li>`).join('')}${files.length > 5 ? `<li>e altri ${files.length - 5}</li>` : ''}</ul>` : ''}
       <div class="nuovo-prog"><input placeholder="Nuovo progetto: nome dell'artista" spellcheck="false"><button class="btn pieno" data-nuovo>Crea</button></div>
       ${progetti.length ? `<div class="sottotitolo">Oppure in un progetto che c'è già</div>
-        <div class="scelte">${progetti.map(p => `<button class="scelta" data-pid="${p.id}">${coverHtml(p)}<span>${esc(p.titolo)}</span></button>`).join('')}</div>` : ''}
+        <div class="scelte">${progetti.map(p => `<button class="scelta-prog" data-pid="${p.id}">${coverHtml(p)}<span>${esc(p.titolo)}</span></button>`).join('')}</div>` : ''}
       <div class="fondo-modale"><button class="btn" data-annulla>Annulla</button></div></div>`
     document.body.append(fondo)
     const campo = $('input', fondo)
