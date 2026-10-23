@@ -418,13 +418,21 @@ const ROTTE = {
 
   'PATCH brani/:id': async (n, d) => {
     const b = trova('brani', n), p = trova('progetti', b.progetto_id)
-    if (d.titolo && d.titolo.trim() && d.titolo !== b.titolo) await rinominaCartella(cartellaBrano(p.titolo, b.titolo), cartellaBrano(p.titolo, d.titolo))
+    // rinominare o spostare in un altro progetto ("Sposta in", se il nome è stato letto male) sposta anche la cartella su Dropbox
+    const nuovoP = d.progetto_id && d.progetto_id !== b.progetto_id ? trova('progetti', d.progetto_id) : p
+    const nuovoT = d.titolo && d.titolo.trim() ? d.titolo : b.titolo
+    if (nuovoP !== p || nuovoT !== b.titolo) await rinominaCartella(cartellaBrano(p.titolo, b.titolo), cartellaBrano(nuovoP.titolo, nuovoT))
     const quando = adesso()
     Archivio.cambia(l => {
       const x = l.brani.find(y => y.id === n)
       if (!x) return
       if ('preferito' in d) { x.preferito = d.preferito ? 1 : 0; x.preferito_il = d.preferito ? quando : null }
       for (const k of ['titolo', 'artista', 'nota', 'versione_attiva']) if (k in d) x[k] = d[k]
+      if (nuovoP !== p) {
+        tocca(l, x.progetto_id)
+        x.progetto_id = nuovoP.id
+        x.ordine = Math.max(-1, ...l.brani.filter(y => y.progetto_id === nuovoP.id && y.id !== n).map(y => y.ordine)) + 1
+      }
       if (Object.keys(d).some(k => k !== 'preferito')) tocca(l, x.progetto_id)  // il cuore non conta come modifica
     })
   },
@@ -549,21 +557,28 @@ function leggiNomeFile(nome, artistiNoti = []) {
     break
   }
   s = s.replace(/[\s\-–]+$/, '')
+  // gli autori tra parentesi in fondo restano col titolo, chiunque sia l'artista: "PAZZA DI ME - Andrei (Milita, Rondine)"
+  let autori = ''
+  const par = s.match(/\s*(\([^()]*\))$/)
+  if (par && s.slice(0, par.index).includes(' - ')) { autori = ' ' + par[1]; s = s.slice(0, par.index).trim() }
   let artista = '', titolo = s
   const parti = s.split(/\s+[-–]\s+/)
   if (parti.length >= 2) {
-    const a = parti[0], b = parti.slice(1).join(' - ')
+    // "Artista - Titolo" o "TITOLO - Artista" (il modo di Matteo, 24/10): decide chi è già noto, poi le maiuscole
+    const primo = parti[0], ultimo = parti[parti.length - 1]
     const noto = x => artistiNoti.some(n => chiaveNome(n) === chiaveNome(x))
-    if (noto(b) && !noto(a)) { artista = b; titolo = a }  // "TITOLO - Artista", come nei titoli importati da untitled
-    else { artista = a; titolo = b }
+    const maiuscolo = x => /\p{Lu}/u.test(x) && x === x.toUpperCase()
+    const inverso = noto(primo) !== noto(ultimo) ? noto(ultimo) : maiuscolo(parti.slice(0, -1).join(' - ')) && !maiuscolo(ultimo)
+    if (inverso) { artista = ultimo; titolo = parti.slice(0, -1).join(' - ') }
+    else { artista = primo; titolo = parti.slice(1).join(' - ') }
   }
-  return { artista, titolo: titolo || s || 'Senza titolo', stato, versione }
+  return { artista, titolo: (titolo || s || 'Senza titolo') + autori, stato, versione }
 }
 
 // pid: si sta caricando dentro un progetto (il file resta lì); artistaDefault: nome della cartella trascinata
 async function caricaBounce(file, { pid = null, artistaDefault = '', progresso } = {}) {
   const l = L()
-  const noti = l.progetti.flatMap(p => [p.titolo, p.artista]).filter(Boolean)
+  const noti = [...l.progetti.flatMap(p => [p.titolo, p.artista]), ...l.brani.map(b => b.artista)].filter(Boolean)
   const info = leggiNomeFile(file.name, noti)
   const artista = info.artista || (pid ? '' : artistaDefault)
   let p = pid ? trova('progetti', pid)

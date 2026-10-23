@@ -468,3 +468,4 @@ body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.o
 .ver-riga .link-btn { font-size: 11px; white-space: nowrap; }
 .ver-riga .ver-nome .campo { width: 52px; flex: none; }
 .pn-artista { font-size: 14px; color: var(--tenue); margin: -2px 0 2px -6px; }
+.menu { max-height: 70vh; overflow-y: auto; }

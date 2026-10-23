@@ -981,6 +981,10 @@ function menuBrano(x, y, bid) {
     ...(rotta().vista !== 'progetto' ? [{ testo: 'Vai al progetto', az: 'm-progetto' }] : []),
     ...(b.audio ? [{ testo: 'Scarica', az: 'm-scarica' }] : []),
     '-',
+    // se il nome del file è stato letto male, il brano si sposta (con le versioni e la cartella su Dropbox)
+    { titoletto: 'Sposta in' },
+    ...progettiOrdinati().filter(p => p.id !== b.progetto_id).map(p => ({ testo: p.titolo, az: 'm-sposta', arg: p.id })),
+    '-',
     { testo: 'Elimina brano', az: 'm-elimina', pericolo: true },
   ], { bid })
 }
@@ -1399,6 +1403,12 @@ document.addEventListener('click', async e => {
       case 'm-progetto': location.hash = `#/progetto/${mb.progetto_id}`; return
       case 'm-scarica': return scaricaVersione(mb.versione_id)
       case 'm-elimina': return eliminaBrano(mb.id)
+      case 'm-sposta': {
+        const dest = S.perId.get(+arg)
+        await api('PATCH', `/api/brani/${mb.id}`, { progetto_id: +arg })
+        avviso(`“${S.info.get(mb.id).nome}” spostato in ${dest.titolo}`)
+        return ricarica()
+      }
     }
   } catch (err) { sbaglio(err) }
 })
