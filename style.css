@@ -448,3 +448,4 @@ body.ospite .tr .cuore, body.ospite .tr .altro { visibility: hidden; }
 .menu.finestra .fila-c { display: flex; gap: 8px; padding: 0 12px; }
 .menu.finestra .fila-c button { width: auto; text-align: center; }
 body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.ospite .tl-testa .nasc2 { visibility: hidden; }
+.testa .meta .condiviso { color: var(--accento); }

@@ -226,8 +226,15 @@ async function mostra() {
   if (vista === 'ascolta') {
     // link d'ascolto: niente account, la "libreria" è il progetto condiviso
     if (!S.ospite || S.ospite.chiave !== arg) {
-      try { S.ospite = { chiave: arg, lib: libOspite(JSON.parse(await decomprimi(arg))) } }
-      catch { S.ospite = null; return benvenuto('Questo link d’ascolto non è valido o è incompleto.') }
+      let d
+      try { d = JSON.parse(await decomprimi(arg)) } catch { S.ospite = null; return benvenuto('Questo link d’ascolto non è valido o è incompleto.') }
+      // link nuovi: dentro c'è solo l'indirizzo della scheda su Dropbox, che si legge ogni volta (sempre aggiornata)
+      let scheda = d
+      if (d.m) {
+        try { scheda = await leggiScheda(d.m) }
+        catch { S.ospite = null; return benvenuto('Questo link d’ascolto non è più attivo: chiedi un link nuovo a chi te l’ha mandato.') }
+      }
+      S.ospite = { chiave: arg, scheda: d.m || null, lib: libOspite(scheda) }
       S.lib = null; S.coda = []; S.i = -1; S.pann = null
     }
   } else {
@@ -451,7 +458,7 @@ function pagProgetto(arg) {
         <span class="tipo">Progetto</span>
         <input class="campo titolo-grande" data-progetto="titolo" value="${esc(p.titolo)}" spellcheck="false">
         <div class="meta"><input class="campo" data-progetto="artista" value="${esc(p.artista)}" placeholder="Artista" spellcheck="false">
-          <span>• ${new Date(p.creato * 1000).getFullYear()} • ${nBrani(brani.length)}${durata ? ', ' + minuti(durata) : ''}${senza ? ` • ${senza} senza audio` : ''}</span></div>
+          <span>• ${new Date(p.creato * 1000).getFullYear()} • ${nBrani(brani.length)}${durata ? ', ' + minuti(durata) : ''}${senza ? ` • ${senza} senza audio` : ''}${p.condivisione?.url ? ' • <b class="condiviso">Condiviso</b>' : ''}</span></div>
       </div>
     </section>
     <div class="dopo-testa" style="--c:${col}">
@@ -941,7 +948,9 @@ function menu(x, y, voci, contesto = {}) {
 function menuProgetto(anchor) {
   const p = S.perId.get(+rotta().arg), r = anchor.getBoundingClientRect()
   menu(r.left, r.bottom + 6, [
-    { testo: 'Condividi link d’ascolto', az: 'condividi' },
+    ...(p.condivisione?.url
+      ? [{ testo: 'Copia link d’ascolto', az: 'condividi' }, { testo: 'Interrompi condivisione', az: 'revoca', pericolo: true }]
+      : [{ testo: 'Condividi link d’ascolto', az: 'condividi' }]),
     { testo: 'Aggiungi brani', az: 'aggiungi' },
     { testo: p.fissato ? 'Togli dai fissati' : 'Fissa nella libreria', az: 'fissa' },
     '-',
@@ -1070,20 +1079,11 @@ async function scaricaVersione(vid) {
   r.fine()
 }
 
-// link d'ascolto di un progetto: link pubblici di Dropbox per ogni brano, i dati compressi nell'indirizzo
+// link d'ascolto di un progetto: sempre lo stesso, segue da solo le versioni nuove (la scheda è in archivio.js)
 async function condividi(pid) {
-  const p = S.perId.get(pid), brani = braniDi(pid).filter(b => b.audio)
-  if (!brani.length) return avviso('Nessun brano con l’audio da condividere', true)
+  if (!braniDi(pid).some(b => b.audio)) return avviso('Nessun brano con l’audio da condividere', true)
   const r = rigaCaricamento('Preparo il link d’ascolto')
-  try {
-    const voci = []
-    for (const [i, b] of brani.entries()) {
-      voci.push([b.titolo, await Dbx.linkPubblico(Archivio.percorso(b.versione_id)), Math.round(b.durata || 0), keyDi(b), bpmDi(b) ? Math.round(bpmDi(b)) : 0])
-      r.avanza((i + 1) / brani.length)
-    }
-    const cover = p.cover ? await Dbx.linkPubblico(p.cover) : null
-    finestraLink(RITORNO + '#/ascolta/' + await comprimi(JSON.stringify({ v: 1, t: p.titolo, a: p.artista, s: p.sfondo, c: cover, b: voci })))
-  } catch (e) { sbaglio(e) }
+  try { finestraLink(await attivaCondivisione(pid)); await ricarica() } catch (e) { sbaglio(e) }
   r.fine()
 }
 function finestraLink(link) {
@@ -1091,7 +1091,8 @@ function finestraLink(link) {
   const m = document.createElement('div')
   m.className = 'menu finestra'
   m.innerHTML = `<div class="titoletto">Link d'ascolto</div>
-    <p>Chi lo apre ascolta i brani di questo progetto, senza account e senza poterli scaricare dall'app. Mandalo solo a chi vuoi tu.</p>
+    <p>Chi lo apre ascolta i brani di questo progetto, senza account e senza poterli modificare. Il link resta sempre lo stesso:
+      quando carichi una versione nuova o aggiungi brani, chi lo riapre sente gli aggiornamenti. Lo spegni dal menu ⋯ → Interrompi condivisione.</p>
     <input readonly value="${esc(link)}">
     <div class="fila-c"><button class="btn pieno" data-az="copia-link">Copia link</button><button class="btn" data-az="chiudi-menu">Chiudi</button></div>`
   document.body.append(m)
@@ -1301,6 +1302,11 @@ document.addEventListener('click', async e => {
     switch (az) {
       case 'entra': return Dbx.entra()
       case 'condividi': return condividi(pid)
+      case 'revoca':
+        if (!confirm('Interrompere la condivisione? Il link d’ascolto smette di funzionare per tutti quelli a cui l’hai mandato.')) return
+        await revocaCondivisione(pid)
+        avviso('Condivisione interrotta')
+        return ricarica()
       case 'copia-link':
         try { await navigator.clipboard.writeText(linkInMenu); avviso('Link copiato') }
         catch { finestraLink(linkInMenu); avviso('Selezionalo e copialo a mano (Cmd+C)', true) }
@@ -1495,9 +1501,35 @@ $('#account').addEventListener('click', e => {
 
 // tornando sull'app (altra scheda, telefono riaperto): se un altro dispositivo ha cambiato qualcosa, si ricarica
 document.addEventListener('visibilitychange', async () => {
-  if (document.hidden || S.ospite || !Dbx.collegato()) return
+  if (document.hidden) return
+  if (S.ospite) return aggiornaOspite()
+  if (!Dbx.collegato()) return
   if (await Archivio.cambiataAltrove()) ricarica()
 })
+
+async function leggiScheda(url) {
+  const r = await fetch(url, { cache: 'no-store' })
+  if (!r.ok) throw new Error('scheda ' + r.status)
+  return r.json()
+}
+// chi ascolta da un link e torna sulla pagina vede subito le versioni nuove (senza fermare quello che sta suonando)
+async function aggiornaOspite() {
+  if (!S.ospite || !S.ospite.scheda) return
+  let scheda
+  try { scheda = await leggiScheda(S.ospite.scheda) } catch { return }
+  const lib = libOspite(scheda)
+  if (JSON.stringify(lib.brani.map(b => [b.titolo, b.url])) === JSON.stringify(S.ospite.lib.brani.map(b => [b.titolo, b.url]))) return
+  S.ospite.lib = lib
+  const c = S.coda[S.i]
+  await caricaLib()
+  if (c) {  // il brano in ascolto resta in coda col suo indirizzo, la coda si rifà sulla lista nuova
+    const url = A.currentSrc
+    S.coda = S.lib.brani.filter(b => b.audio).map(b => voce(b))
+    S.i = Math.max(0, S.lib.brani.findIndex(b => b.url === url))
+  }
+  ridisegna()
+  avviso('Aggiornato: ci sono novità in questo progetto')
+}
 window.addEventListener('beforeunload', e => {
   if (Archivio.pendenti.length || Archivio.salvando) { e.preventDefault(); e.returnValue = '' }
 })

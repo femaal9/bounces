@@ -159,7 +159,7 @@ const Dbx = {
     try { await this.sposta(path, `${CESTINO}/${Date.now()} ${nome}`) } catch (e) { console.warn('cestino', path, e) }
   },
 
-  // link pubblico (chi ce l'ha ascolta) in versione diretta, per <audio>
+  // link pubblico (chi ce l'ha ascolta): {url} è quello di Dropbox (serve per revocarlo), {diretto} va dritto al file
   async linkPubblico(path) {
     let url
     try { url = (await this.rpc('sharing/create_shared_link_with_settings', { path })).url }
@@ -169,10 +169,11 @@ const Dbx = {
         || (await this.rpc('sharing/list_shared_links', { path, direct_only: true })).links[0]?.url
       if (!url) throw e
     }
-    const u = new URL(url)
-    u.searchParams.delete('dl')
-    u.searchParams.set('raw', '1')
-    return u.href
+    return { url, diretto: diretto(url) }
+  },
+  async revoca(url) {
+    if (!url) return
+    try { await this.rpc('sharing/revoke_shared_link', { url }) } catch (e) { console.warn('revoca', url, e) }
   },
 
   account() { return this.rpc('users/get_current_account') },
@@ -258,6 +259,9 @@ const Archivio = {
     this.pendenti.push(op)
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.salva(), 500)
+    // i progetti condivisi aggiornano la loro scheda: chi ha il link sente le versioni nuove senza un link nuovo
+    clearTimeout(this.timerSchede)
+    this.timerSchede = setTimeout(aggiornaSchede, 2500)
   },
 
   async salva() {
@@ -359,9 +363,14 @@ async function rinominaCartella(da, a) {
   try { nuovo = (await Dbx.sposta(da, a)).path_display } catch (e) { console.warn('rinomina cartella', e); return }
   const sost = p => p && p.toLowerCase().startsWith(da.toLowerCase() + '/') ? nuovo + p.slice(da.length) : p
   Archivio.cambia(l => {
-    for (const v of l.versioni) v.path = sost(v.path)
+    for (const v of l.versioni) { const n = sost(v.path); if (n !== v.path) { v.path = n; v.link = null } }  // il link si richiede al prossimo aggiornamento della scheda
     for (const p of l.progetti) p.cover = sost(p.cover)
   })
+}
+
+// link pubblici di versioni e copertina del progetto (per spegnerli quando la condivisione finisce)
+async function revocaLinkVersioni(vids) {
+  for (const v of L().versioni) if (vids.has(v.id) && v.link_url) await Dbx.revoca(v.link_url)
 }
 
 const ROTTE = {
@@ -388,6 +397,7 @@ const ROTTE = {
     const l = L(), p = trova('progetti', n)
     const bids = new Set(l.brani.filter(b => b.progetto_id === n).map(b => b.id))
     const vids = new Set(l.versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
+    if (p.condivisione) await revocaCondivisione(n)
     for (const v of l.versioni) if (vids.has(v.id)) await Dbx.alCestino(v.path)
     await Dbx.alCestino(p.cover)
     Archivio.cambia(l => {
@@ -421,8 +431,9 @@ const ROTTE = {
   'DELETE brani/:id': async n => {
     const b = trova('brani', n)
     const vs = L().versioni.filter(v => v.brano_id === n)
-    for (const v of vs) await Dbx.alCestino(v.path)
     const vids = new Set(vs.map(v => v.id))
+    await revocaLinkVersioni(vids)
+    for (const v of vs) await Dbx.alCestino(v.path)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => !vids.has(m.versione_id))
       l.versioni = l.versioni.filter(v => v.brano_id !== n)
@@ -445,6 +456,7 @@ const ROTTE = {
     const v = trova('versioni', n), b = trova('brani', v.brano_id)
     const altre = L().versioni.filter(x => x.brano_id === b.id && x.id !== n).sort((x, y) => y.creato - x.creato)
     if (!altre.length) throw new Error("È l'unica versione: elimina il brano")
+    await revocaLinkVersioni(new Set([n]))
     await Dbx.alCestino(v.path)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => m.versione_id !== n)
@@ -520,10 +532,10 @@ async function collegaAudioDropbox(vid, file, progresso) {
   const v = trova('versioni', vid), b = trova('brani', v.brano_id), p = trova('progetti', b.progetto_id)
   const { blob, ext } = await preparaAudio(file)
   const m = await Dbx.carica(`${cartellaBrano(p.titolo, b.titolo)}/${pulisci(v.etichetta || 'V1')}.${ext}`, blob, { progresso })
-  if (v.path) await Dbx.alCestino(v.path)
+  if (v.path) { await revocaLinkVersioni(new Set([vid])); await Dbx.alCestino(v.path) }
   Archivio.cambia(l => {
     const x = l.versioni.find(y => y.id === vid)
-    if (x) Object.assign(x, { path: m.path_display, nome_file: file.name, dimensione: blob.size, picchi: null })
+    if (x) Object.assign(x, { path: m.path_display, nome_file: file.name, dimensione: blob.size, picchi: null, link: null, link_url: null })
     tocca(l, b.progetto_id)
   })
   return { versione_id: vid, blob }
@@ -538,7 +550,96 @@ async function copertinaDropbox(pid, file) {
   Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x) { x.cover = m.path_display; x.modificato = adesso() } })
 }
 
-// --- link d'ascolto: i dati del progetto viaggiano compressi nell'indirizzo, l'audio da link pubblici di Dropbox ---
+// --- link d'ascolto sempre aggiornato (24/10) ---
+// Condividere un progetto crea una "scheda" in /.bounces/condivisi/<id>.json (titoli + link pubblici alle versioni attive)
+// e un link pubblico a quella scheda. Il link d'ascolto contiene solo l'indirizzo della scheda; ogni modifica al progetto
+// riscrive la scheda nello stesso file, quindi chi ha il link sente sempre l'ultima versione.
+// Dropbox permette di leggere i file pubblici dal browser solo dall'indirizzo diretto (dl.dropboxusercontent.com, verificato 24/10)
+const CONDIVISI = '/.bounces/condivisi'
+function diretto(url) {
+  const u = new URL(url)
+  u.hostname = 'dl.dropboxusercontent.com'
+  u.searchParams.delete('raw')
+  u.searchParams.set('dl', '1')
+  return u.href
+}
+function impronta(s) {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return (h >>> 0).toString(36)
+}
+
+async function aggiornaScheda(pid) {
+  const l = L(), p = l.progetti.find(x => x.id === pid)
+  if (!p || !p.condivisione) return
+  const brani = l.brani.filter(b => b.progetto_id === pid).sort((a, b) => a.ordine - b.ordine || a.id - b.id)
+  const voci = []
+  for (const b of brani) {
+    const v = l.versioni.find(x => x.id === b.versione_attiva)
+    if (!v || !v.path) continue
+    if (!v.link) {
+      const lk = await Dbx.linkPubblico(v.path)
+      Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link = lk.diretto; x.link_url = lk.url } })
+    }
+    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0)])
+  }
+  if (p.cover && p.cover_di !== p.cover) {
+    const lk = await Dbx.linkPubblico(p.cover)
+    const di = p.cover
+    Archivio.cambia(lb => { const x = lb.progetti.find(y => y.id === pid); if (x) Object.assign(x, { cover_link: lk.diretto, cover_url: lk.url, cover_di: di }) })
+  }
+  const testo = JSON.stringify({ v: 2, t: p.titolo, a: p.artista, s: p.sfondo, c: p.cover ? p.cover_link : null, b: voci })
+  const imp = impronta(testo)
+  if (imp === p.condivisione.impronta) return
+  await Dbx.carica(p.condivisione.path, new Blob([testo], { type: 'application/json' }), { modo: 'overwrite', autorename: false })
+  Archivio.cambia(lb => { const x = lb.progetti.find(y => y.id === pid); if (x && x.condivisione) x.condivisione.impronta = imp })
+}
+
+let aggiornandoSchede = null
+async function aggiornaSchede() {
+  if (aggiornandoSchede) return aggiornandoSchede.then(aggiornaSchede)
+  aggiornandoSchede = (async () => {
+    for (const p of (L() || { progetti: [] }).progetti.filter(x => x.condivisione)) {
+      try { await aggiornaScheda(p.id) } catch (e) { console.warn('scheda', p.titolo, e) }
+    }
+  })()
+  try { await aggiornandoSchede } finally { aggiornandoSchede = null }
+}
+
+// accende la condivisione (se non c'è) e restituisce il link d'ascolto, sempre lo stesso
+async function attivaCondivisione(pid) {
+  if (!trova('progetti', pid).condivisione) {
+    const path = `${CONDIVISI}/${nuovoId()}.json`
+    Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x && !x.condivisione) x.condivisione = { path, impronta: null } })
+  }
+  await aggiornaScheda(pid)
+  let c = trova('progetti', pid).condivisione
+  if (!c.url) {
+    const lk = await Dbx.linkPubblico(c.path)
+    Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x && x.condivisione) Object.assign(x.condivisione, { url: lk.url, diretto: lk.diretto }) })
+    c = trova('progetti', pid).condivisione
+  }
+  return RITORNO + '#/ascolta/' + await comprimi(JSON.stringify({ m: c.diretto }))
+}
+
+// spegne il link d'ascolto: la scheda e i link pubblici dei file smettono di funzionare
+async function revocaCondivisione(pid) {
+  const p = trova('progetti', pid), c = p.condivisione
+  if (!c) return
+  await Dbx.revoca(c.url)
+  const bids = new Set(L().brani.filter(b => b.progetto_id === pid).map(b => b.id))
+  const vids = new Set(L().versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
+  await revocaLinkVersioni(vids)
+  await Dbx.revoca(p.cover_url)
+  await Dbx.alCestino(c.path)
+  Archivio.cambia(l => {
+    const x = l.progetti.find(y => y.id === pid)
+    if (x) { delete x.condivisione; x.cover_link = x.cover_url = x.cover_di = null }
+    for (const v of l.versioni) if (vids.has(v.id)) v.link = v.link_url = null
+  })
+}
+
+// --- i dati nell'indirizzo del link d'ascolto viaggiano compressi ---
 async function comprimi(testo) {
   const flusso = new Blob([testo]).stream().pipeThrough(new CompressionStream('deflate-raw'))
   return b64url(await new Response(flusso).arrayBuffer())
