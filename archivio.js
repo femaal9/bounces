@@ -435,6 +435,8 @@ const ROTTE = {
       if ('preferito' in d) { x.preferito = d.preferito ? 1 : 0; x.preferito_il = d.preferito ? quando : null }
       for (const k of ['titolo', 'artista', 'nota', 'versione_attiva']) if (k in d) x[k] = d[k]
       if (nuovoP !== p) {
+        // l'artista segue lo spostamento, se era quello del vecchio progetto (o mancava); se l'aveva scritto Matteo, resta
+        if (!('artista' in d) && (!x.artista || chiaveNome(x.artista) === chiaveNome(artistaDi(p)))) x.artista = artistaDi(nuovoP)
         tocca(l, x.progetto_id)
         x.progetto_id = nuovoP.id
         x.ordine = Math.max(-1, ...l.brani.filter(y => y.progetto_id === nuovoP.id && y.id !== n).map(y => y.ordine)) + 1
@@ -590,6 +592,9 @@ function leggiNomeFile(nome, artistiNoti = []) {
   return { artista, titolo: (titolo || s || 'Senza titolo') + autori, stato, versione }
 }
 
+// l'artista di un progetto: il campo Artista, se no il nome del progetto (sotto il titolo dei brani smistati a mano)
+const artistaDi = p => (p && (p.artista || p.titolo)) || ''
+
 // pid: si sta caricando dentro un progetto (il file resta lì); artistaDefault: nome della cartella trascinata
 async function caricaBounce(file, { pid = null, artistaDefault = '', progresso } = {}) {
   const l = L()
@@ -620,7 +625,7 @@ async function caricaBounce(file, { pid = null, artistaDefault = '', progresso }
     const bid = nuovoId(), vid = nuovoId(), ora = adesso(), pidX = p.id
     Archivio.cambia(lb => {
       const ordine = Math.max(-1, ...lb.brani.filter(x => x.progetto_id === pidX).map(x => x.ordine)) + 1
-      lb.brani.push({ id: bid, progetto_id: pidX, titolo: maiuscoloTitolo(info.titolo), artista: info.artista || p.artista || '', ordine, versione_attiva: vid, nota: '', creato: ora, preferito: 0, preferito_il: null })
+      lb.brani.push({ id: bid, progetto_id: pidX, titolo: maiuscoloTitolo(info.titolo), artista: info.artista || artistaDi(p), ordine, versione_attiva: vid, nota: '', creato: ora, preferito: 0, preferito_il: null })
       lb.versioni.push({ id: vid, brano_id: bid, etichetta, stato, path: m.path_display, nome_file: file.name, dimensione: blob.size, creato: ora })
       tocca(lb, pidX)
     })
