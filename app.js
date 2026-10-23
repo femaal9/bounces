@@ -1219,8 +1219,8 @@ document.addEventListener('dragover', e => {
   if (rigaTrascinata || !conFile(e)) return
   e.preventDefault()
   document.body.classList.add('trascina-file')
-  $$('.tr.sopra-file').forEach(r => r.classList.remove('sopra-file'))
-  e.target.closest?.('.tr')?.classList.add('sopra-file')
+  $$('.sopra-file').forEach(r => r.classList.remove('sopra-file'))
+  e.target.closest?.('.tr, #lato .voce[href^="#/progetto/"], #zona-auto')?.classList.add('sopra-file')
 })
 document.addEventListener('dragleave', e => {
   if (!e.relatedTarget) { document.body.classList.remove('trascina-file'); $$('.sopra-file').forEach(r => r.classList.remove('sopra-file')) }
@@ -1231,9 +1231,13 @@ document.addEventListener('drop', async e => {
   document.body.classList.remove('trascina-file')
   $$('.sopra-file').forEach(r => r.classList.remove('sopra-file'))
   const riga = e.target.closest?.('.tr'), suCover = e.target.closest?.('.testa .cover')
+  const voceLib = e.target.closest?.('#lato .voce[href^="#/progetto/"]'), inLibreria = e.target.closest?.('#lato')
   const { vista, arg } = rotta()
   const { files, cartella } = await fileDaDrop(e.dataTransfer)
   try {
+    // a sinistra: sopra un progetto → in quel progetto; nel resto della libreria (o nel riquadro "Carica bounce") → smistati dal nome
+    if (voceLib) return caricaBrani(+voceLib.getAttribute('href').split('/').pop(), files)
+    if (inLibreria) return caricaBrani(null, files, cartella || '')
     if (vista === 'progetto' && suCover && files[0] && files[0].type.startsWith('image/')) return caricaCover(+arg, files[0])
     if (riga) {
       const b = S.perBrano.get(+riga.dataset.b), audio = ordinaFile(files)
@@ -1495,6 +1499,8 @@ $('#vai-home').innerHTML = IC.casa
 $('#ic-cerca').innerHTML = IC.cerca
 $('#ic-libreria').innerHTML = IC.libreria
 $('#lib-piu').innerHTML = IC.piu
+$('#ic-carica').innerHTML = IC.piuCerchio
+$('#zona-auto').addEventListener('click', () => scegliAudio(true, f => caricaBrani(null, f)))
 $('#pl-casuale').innerHTML = IC.casuale
 $('#pl-prec').innerHTML = IC.prec
 $('#pl-succ').innerHTML = IC.succ

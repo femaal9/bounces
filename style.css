@@ -469,3 +469,14 @@ body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.o
 .ver-riga .ver-nome .campo { width: 52px; flex: none; }
 .pn-artista { font-size: 14px; color: var(--tenue); margin: -2px 0 2px -6px; }
 .menu { max-height: 70vh; overflow-y: auto; }
+
+/* riquadro "Carica bounce" in fondo alla libreria: i file si smistano da soli nel progetto dell'artista */
+.zona-auto { display: flex; align-items: center; gap: 12px; margin: 8px; padding: 12px 14px; border: 1px dashed #3d3d3d; border-radius: 8px;
+  color: var(--tenue); text-align: left; flex: none; transition: background .15s, border-color .15s; }
+.zona-auto svg { width: 26px; height: 26px; flex: none; }
+.zona-auto b { display: block; color: var(--testo); font-size: 14px; }
+.zona-auto small { display: block; font-size: 12px; line-height: 1.35; }
+.zona-auto:hover { border-color: var(--tenue); background: var(--hover); }
+body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo); }
+.zona-auto.sopra-file { background: color-mix(in srgb, var(--accento) 18%, transparent); border-style: solid; }
+#lato .voce.sopra-file { outline: 2px solid var(--accento); outline-offset: -2px; }
