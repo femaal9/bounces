@@ -559,3 +559,104 @@ body.ospite .tr .ver { visibility: visible; }
   body.ospite #player { margin-bottom: env(safe-area-inset-bottom); }
 }
 @media (max-width: 760px) { body.ospite .tl .tr { grid-template-columns: minmax(0, 1fr) auto; } }
+
+/* ===================== TELEFONO, versione "app" (24/10) =====================
+   Player a schermo intero, freccia Indietro, menu che salgono dal basso, altezza dinamica di Safari,
+   niente effetti "hover" incollati dopo il tocco. Desktop invariato. */
+.barra-sx { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.indietro { display: none; }
+#schermo { display: none; }
+@media (max-width: 760px) {
+  html, body { height: 100dvh; }
+  body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+  button, .tr, .voce, .card, .scorciatoia, .tessera { user-select: none; -webkit-user-select: none; }
+  #principale, #pannello, #lib-lista, .scelte { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+  /* barra in alto: freccia indietro (fuori dalle schede principali), logo, account. La ricerca solo nella scheda Cerca */
+  #barra { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 0 12px; }
+  body.su-cerca #barra { grid-template-columns: auto minmax(0, 1fr) auto; }
+  body:not(.su-cerca) .barra-centro { display: none !important; }
+  .indietro:not([hidden]) { display: grid; place-items: center; width: 36px; height: 36px; margin-left: -8px; color: var(--testo); border-radius: 50%; }
+  .indietro svg { width: 24px; height: 24px; }
+  body.su-cerca .logo { display: none; }
+  .cerca { height: 40px; }
+  .cerca input { font-size: 16px; }
+
+  /* menu ⋯ e finestra del link: fogli che salgono dal basso */
+  .foglio-fondo { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.55); animation: compare .15s ease-out; }
+  .menu.foglio, .menu.finestra { left: 0 !important; right: 0; top: auto !important; bottom: 0; transform: none; width: 100%; max-width: none; max-height: 78dvh;
+    border-radius: 14px 14px 0 0; padding: 10px 8px calc(env(safe-area-inset-bottom) + 10px); z-index: 60; animation: sale .2s ease-out; }
+  .menu.foglio::before { content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: #5a5a5a; margin: 0 auto 8px; }
+  .menu.foglio button { padding: 14px 16px; font-size: 16px; border-radius: 8px; }
+  .menu.foglio .titoletto { padding: 14px 16px 6px; }
+  .menu.finestra p { font-size: 14px; }
+  .menu.finestra input { font-size: 14px; padding: 12px; }
+  .menu.finestra .fila-c .btn { height: 44px; flex: 1; justify-content: center; }
+  @keyframes sale { from { transform: translateY(40%); opacity: .4; } to { transform: none; opacity: 1; } }
+  @keyframes compare { from { opacity: 0; } to { opacity: 1; } }
+
+  /* mini-player: colore della copertina, toccandolo si apre il player grande */
+  #player { background: color-mix(in srgb, var(--c, #3a2d2d) 55%, #141414); cursor: pointer; }
+  .pl-dx #pl-pannello { display: none; }
+  .pl-tasti { right: 8px; bottom: 14px; }
+  .pl-play { width: 40px; height: 40px; }
+  .pl-play svg { width: 22px; height: 22px; }
+  .pl-sx { padding-right: 52px; }
+
+  /* player a schermo intero */
+  #schermo:not([hidden]) { display: flex; }
+  #schermo { position: fixed; inset: 0; z-index: 45; flex-direction: column; overflow-y: auto;
+    padding: calc(env(safe-area-inset-top) + 10px) 24px calc(env(safe-area-inset-bottom) + 24px);
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--c, #555) 70%, #000) 0%, #121212 78%); animation: sale .22s ease-out; }
+  .sc-testa { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: center; }
+  .sc-testa .ic, .sc-vuoto { width: 40px; height: 40px; flex: none; color: var(--testo); }
+  .sc-testa .ic svg { width: 26px; height: 26px; }
+  .sc-testa div { min-width: 0; }
+  .sc-testa small { display: block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.7); }
+  .sc-testa b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-cover { width: 100%; max-width: 420px; aspect-ratio: 1; margin: 6vh auto 4vh; border-radius: 8px; box-shadow: 0 18px 50px rgba(0,0,0,.55); flex: none; }
+  .sc-titolo { display: flex; align-items: center; gap: 12px; }
+  .sc-titolo div { flex: 1; min-width: 0; }
+  .sc-titolo b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-titolo span { display: block; color: rgba(255,255,255,.72); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sc-titolo .ic { width: 44px; height: 44px; color: rgba(255,255,255,.85); }
+  .sc-titolo .ic svg { width: 26px; height: 26px; }
+  #onda-sc { width: 100%; height: 56px; margin-top: 3vh; touch-action: none; flex: none; }
+  .sc-tempi { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,.72); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .sc-tasti { display: flex; align-items: center; justify-content: space-between; margin: 2.5vh 0 3vh; }
+  .sc-tasti .ic { width: 48px; height: 48px; color: var(--testo); position: relative; }
+  .sc-tasti .ic svg { width: 24px; height: 24px; }
+  .sc-tasti .ic.grande svg { width: 32px; height: 32px; }
+  .sc-tasti .ic.on { color: var(--verde); }
+  .sc-tasti .ic.on::after { content: ""; position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--verde); }
+  .sc-play { width: 72px; height: 72px; border-radius: 50%; background: var(--testo); color: #000; display: grid; place-items: center; flex: none; }
+  .sc-play svg { width: 30px; height: 30px; }
+  .sc-dettagli { align-self: center; height: 40px; }
+  body.schermo-aperto #player, body.schermo-aperto #schede { visibility: hidden; }
+
+  /* tocco: niente sfondi "hover" che restano accesi */
+  .tr:hover { background: none; }
+  .tr.scelta { background: rgba(255,255,255,.12); }
+  .card:hover { background: none; }
+  .voce:hover { background: none; }
+  .tr:active, .voce:active, .card:active, .scorciatoia:active { opacity: .7; }
+
+  /* pagine: margini e titoli da telefono */
+  .testa { padding: 20px 16px 18px; }
+  .testa .info .meta { font-size: 13px; }
+  .azioni { padding: 14px 16px; }
+  .nota-progetto { margin: 0 16px 14px; width: calc(100% - 32px); }
+  .zona-file { display: none; }  /* sul telefono si carica dal riquadro della libreria o dal + */
+  .pagina { padding: 0 16px 28px; }
+  .chips { overflow-x: auto; flex-wrap: nowrap; }
+  .chips button { flex: none; }
+  .pn-testa { padding-top: 12px; }
+  .nuovo-commento input[name=testo] { font-size: 16px; }
+}
+@media (max-width: 760px) {
+  body.fuori { grid-template-rows: 56px minmax(0, 1fr); grid-template-areas: "barra" "main"; }
+  .benvenuto { padding: 10vh 24px 40px; }
+  .logo-grande { font-size: 46px; }
+  .benvenuto h1 { font-size: 24px; }
+  .benvenuto p { font-size: 15px; }
+}

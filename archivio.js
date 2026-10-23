@@ -688,7 +688,12 @@ async function aggiornaScheda(pid) {
       const lk = await Dbx.linkPubblico(v.path)
       Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link = lk.diretto; x.link_url = lk.url } })
     }
-    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || ''])
+    // waveform leggera per chi ascolta: 100 valori da 0 a 9 in una stringa
+    const pc = v.picchi && v.picchi.length ? Array.from({ length: 100 }, (_, i) => {
+      const da = Math.floor(i * v.picchi.length / 100), a = Math.max(da + 1, Math.floor((i + 1) * v.picchi.length / 100))
+      return Math.round(Math.max(...v.picchi.slice(da, a)) * 9)
+    }).join('') : ''
+    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)

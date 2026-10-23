@@ -29,6 +29,8 @@ const IC = {
   muto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
   altro: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
   casa: '<svg viewBox="0 0 24 24"><path d="M12.5 3.25a1 1 0 0 0-1 0l-7.5 4.4A2 2 0 0 0 3 9.38V20a1 1 0 0 0 1 1h5.5v-6.5h5V21H20a1 1 0 0 0 1-1V9.38a2 2 0 0 0-1-1.73z"/></svg>',
+  giu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  indietro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   cerca: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg>',
   libreria: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 3v18M9 3v18M14 4l6 16"/></svg>',
   cuore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-9.2-9.3C1.6 7.4 3.7 4 7.2 4c2 0 3.5 1.1 4.8 2.8C13.3 5.1 14.8 4 16.8 4c3.5 0 5.6 3.4 4.4 6.7C19.5 15.4 12 20 12 20z"/></svg>',
@@ -123,6 +125,7 @@ const maiuscoleIniziali = s => s.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpp
 // --- stato ---
 const S = {
   lib: null, perId: new Map(), perBrano: new Map(), info: new Map(), autori: [], perAutore: new Map(),
+  schermo: false,    // telefono: player a schermo intero aperto
   pann: null,        // {bid, prog}: brano aperto nel pannello a destra, col dettaglio del suo progetto
   scelta: null,      // riga selezionata
   coda: [], i: -1, contesto: null, dett: null, loop: false, casuale: false,
@@ -212,6 +215,7 @@ function ridisegna() {
   disegnaLibreria()
   pannello()
   disegnaPlayer()
+  barraTelefono()
 }
 let attesaDisegno = 0
 function ridisegnaPresto() { cancelAnimationFrame(attesaDisegno); attesaDisegno = requestAnimationFrame(ridisegna) }
@@ -268,7 +272,8 @@ function benvenuto(msg = '') {
 // i dati di un link d'ascolto: {t: titolo, a: artista, s: sfondo, c: cover, b: [[titolo, url, durata, tonalità, bpm], ...]}
 function libOspite(d) {
   const ora = Date.now() / 1000
-  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
+  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista, pc], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
+    picchi: pc ? [...pc].map(x => +x / 9) : null,
     preferito: 0, versione_id: i + 1000, etichetta: '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
   const p = { id: 1, titolo: d.t || 'Progetto', artista: d.a || '', nota: '', cover: d.c ? 'condivisa' : null, coverUrl: d.c, sfondo: d.s || 1,
     fissato: 0, cartella_id: null, creato: ora, modificato: ora, n_brani: brani.length, senza_audio: 0,
@@ -575,6 +580,7 @@ function pagCartella(arg) {
 
 // --- pannello "in riproduzione" / dettagli del brano ---
 async function apriBrano(bid, forza = false) {
+  S.schermo = false
   if (S.pann && S.pann.bid === bid && !forza) { S.pann = null; return ridisegna() }
   const b = S.perBrano.get(bid)
   if (!b) return
@@ -749,7 +755,11 @@ async function vai(i) {
     }
   }
   ridisegna()
-  if (S.ospite) return
+  if (S.ospite) {  // chi ascolta da un link: la waveform viene dalla scheda
+    const bo = S.lib.brani.find(x => x.versione_id === c.vid)
+    S.dett = bo && bo.picchi ? { id: c.vid, picchi: bo.picchi, commenti: [] } : null
+    return disegnaSchermo()
+  }
   try { S.dett = await api('GET', `/api/versioni/${c.vid}`) } catch {}
   if (S.coda[S.i] === c) disegnaPunti()
 }
@@ -781,8 +791,9 @@ function disegnaPlayer() {
   $('#pl-loop').classList.toggle('on', S.loop)
   $('#pl-casuale').classList.toggle('on', S.casuale)
   $('#pl-pannello').classList.toggle('on', !!S.pann && !!c && S.pann.bid === c.bid)
-  if (!c) { document.title = 'Bounces'; return }
+  if (!c) { document.title = 'Bounces'; S.schermo = false; disegnaSchermo(); return }
   const b = S.perBrano.get(c.bid), p = S.perId.get(c.pid)
+  $('#player').style.setProperty('--c', coloreDi(p))
   const x = b ? S.info.get(b.id) : { nome: '', autori: [], interprete: '' }
   const cov = $('#pl-cover')
   cov.className = coverClasse(p)
@@ -796,8 +807,77 @@ function disegnaPlayer() {
   cu.innerHTML = b && b.preferito ? IC.cuorePieno : IC.cuore
   document.title = `${A.paused ? '' : '▶ '}${x.nome} · Bounces`
   disegnaPunti()
+  disegnaSchermo()
   tempi()
 }
+
+// --- telefono: player a schermo intero ("In riproduzione"), come nelle app ---
+function apriSchermo() {
+  if (!S.coda[S.i]) return
+  S.schermo = true
+  chiudiMenu()
+  disegnaSchermo()
+}
+let schermoDisegnato = ''
+function disegnaSchermo() {
+  const el = $('#schermo'), c = S.coda[S.i]
+  const aperto = !!(S.schermo && c && telefono())
+  el.hidden = !aperto
+  document.body.classList.toggle('schermo-aperto', aperto)
+  if (!aperto) { schermoDisegnato = ''; return }
+  const b = S.perBrano.get(c.bid), p = S.perId.get(c.pid), x = b ? S.info.get(b.id) : { nome: '', autori: [], interprete: '' }
+  const chiave = [c.vid, A.paused, S.casuale, S.loop, b && b.preferito, p && p.modificato, !!urlCover(p)].join('|')
+  if (chiave === schermoDisegnato) return tempiSchermo()  // niente da ridisegnare: solo i tempi
+  schermoDisegnato = chiave
+  el.style.setProperty('--c', coloreDi(p))
+  el.innerHTML = `
+    <div class="sc-testa"><button class="ic" data-sc="chiudi" title="Chiudi">${IC.giu}</button>
+      <div><small>${S.ospite ? 'In ascolto' : 'In riproduzione da'}</small><b>${esc(p ? p.titolo : '')}</b></div><span class="sc-vuoto"></span></div>
+    ${coverHtml(p, 'sc-cover')}
+    <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}</span></div>
+      ${S.ospite ? '' : `<button class="ic cuore ${b && b.preferito ? 'on' : ''}" data-sc="cuore">${b && b.preferito ? IC.cuorePieno : IC.cuore}</button>`}</div>
+    <canvas id="onda-sc"></canvas>
+    <div class="sc-tempi"><span id="sc-ora">0:00</span><span id="sc-tot">0:00</span></div>
+    <div class="sc-tasti">
+      <button class="ic ${S.casuale ? 'on' : ''}" data-sc="casuale" title="Casuale">${IC.casuale}</button>
+      <button class="ic grande" data-sc="prec" title="Precedente">${IC.prec}</button>
+      <button class="sc-play" data-sc="play" title="Play / pausa">${A.paused ? IC.play : IC.pausa}</button>
+      <button class="ic grande" data-sc="succ" title="Successivo">${IC.succ}</button>
+      <button class="ic ${S.loop ? 'on' : ''}" data-sc="loop" title="Ripeti">${IC.loop}</button>
+    </div>
+    ${S.ospite ? '' : '<button class="btn sc-dettagli" data-sc="dettagli">Versioni, note e commenti</button>'}`
+  tempiSchermo()
+}
+function tempiSchermo() {
+  if (!S.schermo || $('#schermo').hidden) return
+  const c = S.coda[S.i], d = A.duration || (c && c.durata) || 0
+  const o = $('#sc-ora'), t = $('#sc-tot')
+  if (o) o.textContent = tempo(A.currentTime)
+  if (t) t.textContent = tempo(d)
+  disegnaOnda($('#onda-sc'), S.dett && c && S.dett.id === c.vid ? S.dett.picchi : null, d, d ? A.currentTime / d : 0)
+}
+$('#schermo').addEventListener('click', e => {
+  const t = e.target.closest('[data-sc]'), c = S.coda[S.i]
+  if (!t || !c) return
+  e.stopPropagation()
+  const az = t.dataset.sc
+  if (az === 'chiudi') { S.schermo = false; return disegnaSchermo() }
+  if (az === 'play') return A.paused ? A.play() : A.pause()
+  if (az === 'prec') return $('#pl-prec').click()
+  if (az === 'succ') return prossimo()
+  if (az === 'casuale') return $('#pl-casuale').click()
+  if (az === 'loop') return $('#pl-loop').click()
+  if (az === 'cuore') return cuore(c.bid)
+  if (az === 'dettagli') { S.schermo = false; disegnaSchermo(); return apriBrano(c.bid, true) }
+})
+// sulla waveform grande ci si sposta col dito
+;(() => {
+  let giu = false
+  const vai = e => { const cv = $('#onda-sc'), c = S.coda[S.i]; if (!cv || !c) return; const r = cv.getBoundingClientRect(); salta(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (A.duration || c.durata || 0)) }
+  $('#schermo').addEventListener('pointerdown', e => { if (!e.target.closest('#onda-sc')) return; giu = true; e.target.setPointerCapture(e.pointerId); vai(e) })
+  $('#schermo').addEventListener('pointermove', e => { if (giu) vai(e) })
+  $('#schermo').addEventListener('pointerup', () => { giu = false })
+})()
 
 function disegnaPunti() {
   const c = S.coda[S.i], d = A.duration || (c && c.durata) || 0
@@ -818,22 +898,29 @@ function tempi() {
   const po = $('#pn-ora')
   if (po && S.pannOnda && c && S.pannOnda.vid === c.vid) po.textContent = tempo(A.currentTime)
   disegnaOndaPannello()
+  tempiSchermo()
 }
 
 const colore = nome => getComputedStyle(document.documentElement).getPropertyValue(nome).trim()
+const telefono = () => matchMedia('(max-width: 760px)').matches
 function disegnaOndaPannello() {
-  const cv = $('#onda-pn'), o = S.pannOnda
-  if (!cv || !o || !cv.clientWidth) return
+  const o = S.pannOnda
+  if (!o) return
+  const c = S.coda[S.i], qui = c && c.vid === o.vid
+  const dur = (qui && A.duration) || o.durata || 0
+  disegnaOnda($('#onda-pn'), o.picchi, dur, qui && dur ? A.currentTime / dur : 0, o.commenti, 10)
+}
+// waveform a barre: già ascoltato in verde (bianco in pausa), pallini dei commenti in alto se c'è spazio (alto > 0)
+function disegnaOnda(cv, picchi, dur, fatto, commenti = [], alto = 0) {
+  if (!cv || !cv.clientWidth) return
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr) }
   const g = cv.getContext('2d')
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
   g.clearRect(0, 0, w, h)
-  const c = S.coda[S.i], qui = c && c.vid === o.vid
-  const dur = (qui && A.duration) || o.durata || 0, fatto = qui && dur ? A.currentTime / dur : 0
-  const p = o.picchi && o.picchi.length ? o.picchi : null
-  const passo = 3, barre = Math.floor(w / passo), alto = 10, spazio = h - alto - 2
-  const verde = colore('--verde'), chiaro = '#ffffff', scuro = '#4d4d4d'
+  const p = picchi && picchi.length ? picchi : null
+  const passo = 3, barre = Math.floor(w / passo), spazio = h - alto - 2
+  const verde = colore('--verde'), chiaro = '#ffffff', scuro = 'rgba(255,255,255,.28)'
   for (let k = 0; k < barre; k++) {
     let a = 0.06
     if (p) {
@@ -844,9 +931,9 @@ function disegnaOndaPannello() {
     g.fillStyle = (k + 0.5) / barre <= fatto ? (A.paused ? chiaro : verde) : scuro
     g.fillRect(k * passo, alto + (spazio - bh) / 2, 2, bh)
   }
-  if (dur) {
+  if (dur && alto) {
     g.fillStyle = verde
-    for (const m of o.commenti || []) {
+    for (const m of commenti || []) {
       if (m.secondi == null) continue
       g.beginPath()
       g.arc(Math.min(w - 4, Math.max(4, m.secondi / dur * w)), 4, 3.5, 0, Math.PI * 2)
@@ -951,7 +1038,23 @@ $('#pl-pannello').addEventListener('click', () => {
   if (S.pann && S.pann.bid === c.bid) { S.pann = null; return ridisegna() }
   apriBrano(c.bid, true)
 })
-$('#pl-cover').addEventListener('click', () => { const c = S.coda[S.i]; if (c) apriBrano(c.bid, true) })
+$('#pl-cover').addEventListener('click', () => { const c = S.coda[S.i]; if (c && !telefono()) apriBrano(c.bid, true) })
+// sul telefono toccare il mini-player (tranne il play) apre il player a schermo intero
+$('#player').addEventListener('click', e => {
+  if (!telefono() || e.target.closest('#pl-play')) return
+  e.preventDefault()
+  e.stopPropagation()
+  apriSchermo()
+}, true)
+
+// barra in alto sul telefono: freccia Indietro fuori dalle schede principali, ricerca solo nella scheda Cerca
+function barraTelefono() {
+  const { vista } = rotta()
+  const radice = ['', 'cerca', 'libreria'].includes(vista) || S.ospite
+  $('#indietro').hidden = radice
+  document.body.classList.toggle('su-cerca', vista === 'cerca')
+}
+$('#indietro').addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/' })
 $('#pl-cuore').addEventListener('click', () => { const c = S.coda[S.i]; if (c) cuore(c.bid) })
 
 document.addEventListener('keydown', e => {
@@ -960,7 +1063,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); $('#pl-play').click() }
   else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? $('#pl-prec').click() : salta(A.currentTime - 5) }
   else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? prossimo() : salta(A.currentTime + 5) }
-  else if (e.key === 'Escape') { chiudiMenu(); if (S.pann) { S.pann = null; ridisegna() } }
+  else if (e.key === 'Escape') { chiudiMenu(); if (S.schermo) { S.schermo = false; disegnaSchermo() } else if (S.pann) { S.pann = null; ridisegna() } }
 })
 
 async function cuore(bid) {
@@ -974,15 +1077,22 @@ async function cuore(bid) {
 }
 
 // --- menu a tendina (⋯ del progetto, + della libreria, tasto destro sui brani) ---
-function chiudiMenu() { $$('.menu').forEach(m => m.remove()) }
+function chiudiMenu() { $$('.menu, .foglio-fondo').forEach(m => m.remove()) }
 function menu(x, y, voci, contesto = {}) {
   chiudiMenu()
   const m = document.createElement('div')
   m.className = 'menu'
+  if (telefono()) {  // sul telefono: foglio dal basso, voci grandi, toccando fuori si chiude e basta
+    const fondo = document.createElement('div')
+    fondo.className = 'foglio-fondo'
+    document.body.append(fondo)
+    m.classList.add('foglio')
+  }
   m.innerHTML = voci.map(v => v === '-' ? '<hr>' : v.titoletto ? `<div class="titoletto">${esc(v.titoletto)}</div>`
     : `<button data-az="${v.az}" ${v.arg != null ? `data-arg="${esc(v.arg)}"` : ''} class="${v.pericolo ? 'pericolo' : ''}">${esc(v.testo)}</button>`).join('')
   Object.assign(m.dataset, contesto)
   document.body.append(m)
+  if (m.classList.contains('foglio')) return
   m.style.left = Math.max(8, Math.min(x, innerWidth - m.offsetWidth - 8)) + 'px'
   m.style.top = (y + m.offsetHeight > innerHeight - 8 ? Math.max(8, y - m.offsetHeight) : y) + 'px'
 }
@@ -1378,7 +1488,7 @@ document.addEventListener('dblclick', e => {
 document.addEventListener('click', async e => {
   const inMenu = e.target.closest('.menu')
   const t = e.target.closest('[data-az], [data-suona], [data-t], .tr')
-  if (!inMenu) chiudiMenu()
+  if (!inMenu && $('.menu')) { chiudiMenu(); e.preventDefault(); return }
   if (!t) return
   try {
     if (t.dataset.suona) { e.preventDefault(); e.stopPropagation(); return suonaContesto(t.dataset.suona) }
@@ -1426,7 +1536,7 @@ document.addEventListener('click', async e => {
         }
         return
       case 'suona': return suonaBrano(bRiga.id)
-      case 'apri': return apriBrano(bRiga.id)
+      case 'apri': return telefono() ? menuBrano(0, 0, bRiga.id) : apriBrano(bRiga.id)  // sul telefono ⋯ apre le azioni dal basso
       case 'cuore': return cuore(arg ? +arg : bRiga.id)
       case 'chiudi': S.pann = null; return ridisegna()
       case 'nuovo-progetto': e.preventDefault(); return nuovoProgetto()
@@ -1586,6 +1696,7 @@ $('#vai-home').innerHTML = IC.casa
 $('#ic-cerca').innerHTML = IC.cerca
 $('#ic-libreria').innerHTML = IC.libreria
 $('#lib-piu').innerHTML = IC.piu
+$('#indietro').innerHTML = IC.indietro
 $('#ic-carica').innerHTML = IC.piuCerchio
 $('#zona-auto').addEventListener('click', () => scegliAudio(true, f => caricaBrani(null, f)))
 $('#pl-casuale').innerHTML = IC.casuale
