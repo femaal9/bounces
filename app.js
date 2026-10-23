@@ -115,7 +115,7 @@ function scomponi(titolo) {
   }
   const d = t.match(/^(.*?)\s+-\s*(.*)$/)
   if (d) { t = d[1].trim(); interprete = d[2].trim() }
-  return { nome: t || String(titolo || ''), interprete, tag, autori }
+  return { nome: (t || String(titolo || '')).toLocaleUpperCase('it'), interprete, tag, autori }  // titoli sempre in maiuscolo
 }
 const maiuscoleIniziali = s => s.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase())
 
@@ -162,11 +162,14 @@ async function caricaLib() {
     const forme = Object.keys(e.forme).sort((a, b) => e.forme[b] - e.forme[a])
     e.nome = forme.find(f => f !== f.toUpperCase()) || (forme[0].length <= 4 ? forme[0] : maiuscoleIniziali(forme[0]))
     e.progetti = new Set(e.brani.map(b => b.progetto_id)).size
+    e.brani.sort(alfabetico)
   }
   S.autori = [...autori.values()].sort((a, b) => b.brani.length - a.brani.length || a.nome.localeCompare(b.nome))
   S.perAutore = autori
 }
-const braniDi = pid => S.lib.brani.filter(b => b.progetto_id === pid).sort((a, b) => a.ordine - b.ordine || a.id - b.id)
+const alfabetico = (a, b) => S.info.get(a.id).nome.localeCompare(S.info.get(b.id).nome, 'it', { sensitivity: 'base', numeric: true }) || a.id - b.id
+const braniDi = pid => S.lib.brani.filter(b => b.progetto_id === pid)
+  .sort(S.perId.get(pid)?.ordine_manuale ? (a, b) => a.ordine - b.ordine || a.id - b.id : alfabetico)
 const preferiti = () => S.lib.brani.filter(b => b.preferito).sort((a, b) => (b.preferito_il || 0) - (a.preferito_il || 0))
 const progettiOrdinati = () => S.lib.progetti.slice().sort((a, b) => (b.fissato - a.fissato) || (b.modificato - a.modificato))
 
@@ -961,6 +964,7 @@ function menuProgetto(anchor) {
       ? [{ testo: 'Copia link d’ascolto', az: 'condividi' }, { testo: 'Interrompi condivisione', az: 'revoca', pericolo: true }]
       : [{ testo: 'Condividi link d’ascolto', az: 'condividi' }]),
     { testo: 'Aggiungi brani', az: 'aggiungi' },
+    ...(p.ordine_manuale ? [{ testo: 'Ordina in ordine alfabetico', az: 'alfabetico' }] : []),
     { testo: p.fissato ? 'Togli dai fissati' : 'Fissa nella libreria', az: 'fissa' },
     '-',
     { testo: 'Scegli copertina', az: 'cover' },
@@ -1043,11 +1047,23 @@ const chiaveFile = nome => norm(nome.replace(/\.[^.]+$/, '').replace(/_/g, ' '))
 async function caricaBrani(pid, files, cartella = '') {
   files = ordinaFile(files)
   if (!files.length) return avviso('Nessun file audio (wav, aiff, mp3, m4a, flac)', true)
+  // i file senza artista nel nome (e senza cartella che lo dica): si chiede dove metterli, una volta per tutti
+  const senza = new Set(), lib = Archivio.lib
+  if (!pid && !cartella) {
+    const noti = [...lib.progetti.flatMap(p => [p.titolo, p.artista]), ...lib.brani.map(b => b.artista)].filter(Boolean)
+    for (const f of files) if (!leggiNomeFile(f.name, noti).artista) senza.add(f)
+  }
+  let destino = null
+  if (senza.size) {
+    destino = await scegliDestinazione([...senza])
+    if (!destino) files = files.filter(f => !senza.has(f))
+    if (!files.length) return
+  }
   const dove = new Map()
   for (const f of files) {
     const r = rigaCaricamento(f.name)
     try {
-      const ris = await caricaBounce(f, { pid, artistaDefault: cartella, progresso: r.avanza })
+      const ris = await caricaBounce(f, { pid: pid || (senza.has(f) ? destino : null), artistaDefault: cartella, progresso: r.avanza })
       dove.set(ris.progetto_id, (dove.get(ris.progetto_id) || 0) + 1)
       await ricarica()  // il brano compare subito; durata, waveform, BPM e tonalità arrivano dall'analisi
       analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
@@ -1059,6 +1075,39 @@ async function caricaBrani(pid, files, cartella = '') {
   avviso(`${n === 1 ? 'Brano caricato' : n + ' brani caricati'} in ${[...dove.keys()].map(id => S.perId.get(id)?.titolo).join(', ')}`)
   // caricando fuori da un progetto si va dove sono finiti (se è uno solo)
   if (!pid && dove.size === 1) location.hash = `#/progetto/${[...dove.keys()][0]}`
+}
+
+// finestrella "Dove lo metto?": un progetto che c'è già, o uno nuovo col nome che scrivi. Restituisce l'id (null = annulla)
+function scegliDestinazione(files) {
+  return new Promise(ok => {
+    const fondo = document.createElement('div')
+    fondo.className = 'modale-fondo'
+    const progetti = S.lib.progetti.slice().sort((a, b) => a.titolo.localeCompare(b.titolo, 'it', { sensitivity: 'base' }))
+    fondo.innerHTML = `<div class="modale">
+      <h3>Dove lo metto?</h3>
+      <p>${files.length === 1 ? `Nel nome di <b>${esc(files[0].name)}</b> non c'è l'artista.` : `Questi ${files.length} brani non hanno l'artista nel nome:`}</p>
+      ${files.length > 1 ? `<ul>${files.slice(0, 5).map(f => `<li>${esc(f.name)}</li>`).join('')}${files.length > 5 ? `<li>e altri ${files.length - 5}</li>` : ''}</ul>` : ''}
+      <div class="nuovo-prog"><input placeholder="Nuovo progetto: nome dell'artista" spellcheck="false"><button class="btn pieno" data-nuovo>Crea</button></div>
+      ${progetti.length ? `<div class="sottotitolo">Oppure in un progetto che c'è già</div>
+        <div class="scelte">${progetti.map(p => `<button class="scelta" data-pid="${p.id}">${coverHtml(p)}<span>${esc(p.titolo)}</span></button>`).join('')}</div>` : ''}
+      <div class="fondo-modale"><button class="btn" data-annulla>Annulla</button></div></div>`
+    document.body.append(fondo)
+    const campo = $('input', fondo)
+    const fine = v => { fondo.remove(); ok(v) }
+    const crea = async () => {
+      const nome = campo.value.trim()
+      if (!nome) return campo.focus()
+      try { const r = await api('POST', '/api/progetti', { titolo: nome, artista: nome }); await caricaLib(); fine(r.id) } catch (e) { sbaglio(e) }
+    }
+    fondo.addEventListener('click', e => {
+      const b = e.target.closest('[data-pid]')
+      if (b) return fine(+b.dataset.pid)
+      if (e.target.closest('[data-nuovo]')) return crea()
+      if (e.target.closest('[data-annulla]') || e.target === fondo) fine(null)
+    })
+    campo.addEventListener('keydown', e => { if (e.key === 'Enter') crea(); if (e.key === 'Escape') fine(null) })
+    setTimeout(() => campo.focus(), 50)
+  })
 }
 
 async function caricaVersione(bid, file, collegaA = null) {
@@ -1320,6 +1369,7 @@ document.addEventListener('click', async e => {
     switch (az) {
       case 'entra': return Dbx.entra()
       case 'condividi': return condividi(pid)
+      case 'alfabetico': await api('PATCH', `/api/progetti/${pid}`, { ordine_manuale: 0 }); avviso('Brani in ordine alfabetico'); return ricarica()
       case 'revoca':
         if (!confirm('Interrompere la condivisione? Il link d’ascolto smette di funzionare per tutti quelli a cui l’hai mandato.')) return
         await revocaCondivisione(pid)

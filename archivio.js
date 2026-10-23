@@ -345,7 +345,7 @@ function vistaLibreria() {
 
 function vistaProgetto(pid) {
   const l = L(), p = trova('progetti', pid)
-  const brani = l.brani.filter(b => b.progetto_id === pid).sort((a, b) => a.ordine - b.ordine || a.id - b.id).map(b => ({
+  const brani = l.brani.filter(b => b.progetto_id === pid).sort(ordinePer(p)).map(b => ({
     ...b,
     versioni: l.versioni.filter(v => v.brano_id === b.id).sort((x, y) => x.creato - y.creato || x.id - y.id)
       .map(v => ({ ...v, audio: !!v.path, commenti: commentiDi(v.id) })),
@@ -389,7 +389,7 @@ const ROTTE = {
     Archivio.cambia(l => {
       const x = l.progetti.find(y => y.id === n)
       if (!x) return
-      for (const k of ['titolo', 'artista', 'nota', 'fissato', 'cartella_id', 'sfondo']) if (k in d) x[k] = d[k]
+      for (const k of ['titolo', 'artista', 'nota', 'fissato', 'cartella_id', 'sfondo', 'ordine_manuale']) if (k in d) x[k] = d[k]
       x.modificato = adesso()
     })
   },
@@ -413,13 +413,19 @@ const ROTTE = {
   },
   'POST progetti/:id/ordine': (n, d) => {
     const ids = d.ids || []
-    Archivio.cambia(l => { ids.forEach((bid, i) => { const b = l.brani.find(x => x.id === bid && x.progetto_id === n); if (b) b.ordine = i }); tocca(l, n) })
+    Archivio.cambia(l => {
+      ids.forEach((bid, i) => { const b = l.brani.find(x => x.id === bid && x.progetto_id === n); if (b) b.ordine = i })
+      const p = l.progetti.find(x => x.id === n)
+      if (p) p.ordine_manuale = 1
+      tocca(l, n)
+    })
   },
 
   'PATCH brani/:id': async (n, d) => {
     const b = trova('brani', n), p = trova('progetti', b.progetto_id)
     // rinominare o spostare in un altro progetto ("Sposta in", se il nome è stato letto male) sposta anche la cartella su Dropbox
     const nuovoP = d.progetto_id && d.progetto_id !== b.progetto_id ? trova('progetti', d.progetto_id) : p
+    if (d.titolo && d.titolo.trim()) d = { ...d, titolo: maiuscoloTitolo(d.titolo) }
     const nuovoT = d.titolo && d.titolo.trim() ? d.titolo : b.titolo
     if (nuovoP !== p || nuovoT !== b.titolo) await rinominaCartella(cartellaBrano(p.titolo, b.titolo), cartellaBrano(nuovoP.titolo, nuovoT))
     const quando = adesso()
@@ -543,6 +549,15 @@ const STATI = ['demo', 'prod', 'rec', 'premix', 'mix', 'master']
 const chiaveNome = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 // "L'ENNESIMA CANZONE - Lea Gavino (Calderoni, Milita)" e "Fuggire da te" → la parte che identifica il brano
 const titoloBase = t => String(t || '').replace(/\s*\([^()]*\)\s*$/, '').split(/\s+[-–]\s*/)[0].trim()
+// 24/10, Matteo: titoli sempre in MAIUSCOLO. Solo il titolo: "Fuggire da te (Milita, Rondine)" → "FUGGIRE DA TE (Milita, Rondine)"
+function maiuscoloTitolo(t) {
+  const m = String(t || '').trim().match(/^(.*?)(\s+[-–]\s.*?)?(\s*\([^()]*\))?$/)
+  return m ? m[1].toLocaleUpperCase('it') + (m[2] || '') + (m[3] || '') : String(t || '').toLocaleUpperCase('it')
+}
+// brani in ordine alfabetico (24/10, Matteo), ovunque: progetto, autore, link d'ascolto
+const perTitolo = (a, b) => titoloBase(a.titolo).localeCompare(titoloBase(b.titolo), 'it', { sensitivity: 'base', numeric: true }) || a.id - b.id
+// se Matteo trascina i brani per riordinarli, quel progetto tiene il suo ordine (ordine_manuale) finché non torna all'alfabetico
+const ordinePer = p => p && p.ordine_manuale ? (a, b) => a.ordine - b.ordine || a.id - b.id : perTitolo
 const nomeVersione = (etichetta, stato) => pulisci(etichetta + (stato ? ' ' + stato.toUpperCase() : ''))
 
 function leggiNomeFile(nome, artistiNoti = []) {
@@ -601,11 +616,11 @@ async function caricaBounce(file, { pid = null, artistaDefault = '', progresso }
   } else {
     const { blob, ext } = await preparaAudio(file)
     const etichetta = info.versione || 'V1', stato = info.stato
-    const m = await Dbx.carica(`${cartellaBrano(p.titolo, info.titolo)}/${nomeVersione(etichetta, stato)}.${ext}`, blob, { progresso })
+    const m = await Dbx.carica(`${cartellaBrano(p.titolo, maiuscoloTitolo(info.titolo))}/${nomeVersione(etichetta, stato)}.${ext}`, blob, { progresso })
     const bid = nuovoId(), vid = nuovoId(), ora = adesso(), pidX = p.id
     Archivio.cambia(lb => {
       const ordine = Math.max(-1, ...lb.brani.filter(x => x.progetto_id === pidX).map(x => x.ordine)) + 1
-      lb.brani.push({ id: bid, progetto_id: pidX, titolo: info.titolo, artista: info.artista || p.artista || '', ordine, versione_attiva: vid, nota: '', creato: ora, preferito: 0, preferito_il: null })
+      lb.brani.push({ id: bid, progetto_id: pidX, titolo: maiuscoloTitolo(info.titolo), artista: info.artista || p.artista || '', ordine, versione_attiva: vid, nota: '', creato: ora, preferito: 0, preferito_il: null })
       lb.versioni.push({ id: vid, brano_id: bid, etichetta, stato, path: m.path_display, nome_file: file.name, dimensione: blob.size, creato: ora })
       tocca(lb, pidX)
     })
@@ -659,7 +674,7 @@ function impronta(s) {
 async function aggiornaScheda(pid) {
   const l = L(), p = l.progetti.find(x => x.id === pid)
   if (!p || !p.condivisione) return
-  const brani = l.brani.filter(b => b.progetto_id === pid).sort((a, b) => a.ordine - b.ordine || a.id - b.id)
+  const brani = l.brani.filter(b => b.progetto_id === pid).sort(ordinePer(p))
   const voci = []
   for (const b of brani) {
     const v = l.versioni.find(x => x.id === b.versione_attiva)
