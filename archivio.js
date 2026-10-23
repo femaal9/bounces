@@ -330,8 +330,8 @@ function vistaLibreria() {
   const nver = contaPer(l.versioni, 'brano_id'), ncom = contaPer(l.commenti, 'versione_id')
   const brani = l.brani.map(b => {
     const v = perV.get(b.versione_attiva) || {}
-    return { id: b.id, progetto_id: b.progetto_id, titolo: b.titolo, ordine: b.ordine, creato: b.creato, preferito: b.preferito ? 1 : 0,
-      preferito_il: b.preferito_il, versione_id: v.id, etichetta: v.etichetta, bpm: v.bpm, bpm_auto: v.bpm_auto, tonalita: v.tonalita,
+    return { id: b.id, progetto_id: b.progetto_id, titolo: b.titolo, artista: b.artista || '', ordine: b.ordine, creato: b.creato, preferito: b.preferito ? 1 : 0,
+      preferito_il: b.preferito_il, versione_id: v.id, etichetta: v.etichetta, stato: v.stato || null, bpm: v.bpm, bpm_auto: v.bpm_auto, tonalita: v.tonalita,
       tonalita_auto: v.tonalita_auto, durata: v.durata, audio: v.path ? 1 : 0, nver: nver.get(b.id) || 0, ncom: ncom.get(v.id) || 0 }
   }).sort((a, b) => a.progetto_id - b.progetto_id || a.ordine - b.ordine || a.id - b.id)
   const progetti = l.progetti.map(p => {
@@ -424,7 +424,7 @@ const ROTTE = {
       const x = l.brani.find(y => y.id === n)
       if (!x) return
       if ('preferito' in d) { x.preferito = d.preferito ? 1 : 0; x.preferito_il = d.preferito ? quando : null }
-      for (const k of ['titolo', 'nota', 'versione_attiva']) if (k in d) x[k] = d[k]
+      for (const k of ['titolo', 'artista', 'nota', 'versione_attiva']) if (k in d) x[k] = d[k]
       if (Object.keys(d).some(k => k !== 'preferito')) tocca(l, x.progetto_id)  // il cuore non conta come modifica
     })
   },
@@ -448,8 +448,8 @@ const ROTTE = {
     Archivio.cambia(l => {
       const v = l.versioni.find(x => x.id === n)
       if (!v) return
-      for (const k of ['etichetta', 'bpm', 'tonalita', 'bpm_auto', 'tonalita_auto', 'picchi', 'durata']) if (k in d) v[k] = vuotoNull(d[k])
-      if (['etichetta', 'bpm', 'tonalita'].some(k => k in d)) tocca(l, b.progetto_id)
+      for (const k of ['etichetta', 'stato', 'bpm', 'tonalita', 'bpm_auto', 'tonalita_auto', 'picchi', 'durata']) if (k in d) v[k] = vuotoNull(d[k])
+      if (['etichetta', 'stato', 'bpm', 'tonalita'].some(k => k in d)) tocca(l, b.progetto_id)
     })
   },
   'DELETE versioni/:id': async n => {
@@ -515,16 +515,88 @@ async function nuovoBranoDropbox(pid, file, progresso) {
 async function nuovaVersioneDropbox(bid, file, progresso) {
   const b = trova('brani', bid), p = trova('progetti', b.progetto_id)
   const { blob, ext } = await preparaAudio(file)
-  const etichetta = 'V' + (L().versioni.filter(v => v.brano_id === bid).length + 1)
-  const m = await Dbx.carica(`${cartellaBrano(p.titolo, b.titolo)}/${etichetta}.${ext}`, blob, { progresso })
+  const info = leggiNomeFile(file.name)  // "... MASTER V3": versione e stato dal nome, se ci sono
+  const etichetta = info.versione || 'V' + (L().versioni.filter(v => v.brano_id === bid).length + 1)
+  const stato = info.stato
+  const m = await Dbx.carica(`${cartellaBrano(p.titolo, b.titolo)}/${nomeVersione(etichetta, stato)}.${ext}`, blob, { progresso })
   const vid = nuovoId(), ora = adesso()
   Archivio.cambia(l => {
-    l.versioni.push({ id: vid, brano_id: bid, etichetta, path: m.path_display, nome_file: file.name, dimensione: blob.size, creato: ora })
+    l.versioni.push({ id: vid, brano_id: bid, etichetta, stato, path: m.path_display, nome_file: file.name, dimensione: blob.size, creato: ora })
     const x = l.brani.find(y => y.id === bid)
     if (x) x.versione_attiva = vid
     tocca(l, b.progetto_id)
   })
   return { brano_id: bid, versione_id: vid, blob }
+}
+
+// --- caricamento automatico dal nome del file (24/10): "Dhome - Fuggire da te MASTER V3.wav" →
+// progetto Dhome (creato se manca), brano "Fuggire da te" (nuova versione se esiste già), stato MASTER, versione V3 ---
+const STATI = ['demo', 'prod', 'rec', 'premix', 'mix', 'master']
+const chiaveNome = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+// "L'ENNESIMA CANZONE - Lea Gavino (Calderoni, Milita)" e "Fuggire da te" → la parte che identifica il brano
+const titoloBase = t => String(t || '').replace(/\s*\([^()]*\)\s*$/, '').split(/\s+[-–]\s*/)[0].trim()
+const nomeVersione = (etichetta, stato) => pulisci(etichetta + (stato ? ' ' + stato.toUpperCase() : ''))
+
+function leggiNomeFile(nome, artistiNoti = []) {
+  let s = nome.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim()
+  let versione = null, stato = null
+  // in fondo, in qualsiasi ordine: "MASTER V3", "V3 MASTER", "mix v2", "(pre-mix)"
+  for (let giro = 0; giro < 4; giro++) {
+    let m = !versione && s.match(/[\s\-–(]*\bv\.?\s?(\d{1,3})\)?$/i)
+    if (m) { versione = 'V' + +m[1]; s = s.slice(0, m.index).trim(); continue }
+    m = !stato && s.match(/[\s\-–(]*\b(pre[\s-]?mix|demo|prod|rec|mix|master)\)?$/i)
+    if (m) { stato = m[1].toLowerCase().replace(/[\s-]/g, ''); s = s.slice(0, m.index).trim(); continue }
+    break
+  }
+  s = s.replace(/[\s\-–]+$/, '')
+  let artista = '', titolo = s
+  const parti = s.split(/\s+[-–]\s+/)
+  if (parti.length >= 2) {
+    const a = parti[0], b = parti.slice(1).join(' - ')
+    const noto = x => artistiNoti.some(n => chiaveNome(n) === chiaveNome(x))
+    if (noto(b) && !noto(a)) { artista = b; titolo = a }  // "TITOLO - Artista", come nei titoli importati da untitled
+    else { artista = a; titolo = b }
+  }
+  return { artista, titolo: titolo || s || 'Senza titolo', stato, versione }
+}
+
+// pid: si sta caricando dentro un progetto (il file resta lì); artistaDefault: nome della cartella trascinata
+async function caricaBounce(file, { pid = null, artistaDefault = '', progresso } = {}) {
+  const l = L()
+  const noti = l.progetti.flatMap(p => [p.titolo, p.artista]).filter(Boolean)
+  const info = leggiNomeFile(file.name, noti)
+  const artista = info.artista || (pid ? '' : artistaDefault)
+  let p = pid ? trova('progetti', pid)
+    : l.progetti.find(x => chiaveNome(x.titolo) === chiaveNome(artista || 'Da smistare') || (artista && chiaveNome(x.artista) === chiaveNome(artista)))
+  let progettoNuovo = false
+  if (!p) {
+    const id = nuovoId(), ora = adesso(), titolo = artista || 'Da smistare', sfondo = 1 + Math.floor(Math.random() * 10)
+    Archivio.cambia(lb => lb.progetti.push({ id, titolo, artista, nota: '', cover: null, sfondo, fissato: 0, cartella_id: null, creato: ora, modificato: ora }))
+    p = trova('progetti', id)
+    progettoNuovo = true
+  }
+  const b = L().brani.find(x => x.progetto_id === p.id && chiaveNome(titoloBase(x.titolo)) === chiaveNome(titoloBase(info.titolo)))
+  let ris
+  if (b) {
+    const attiva = L().versioni.find(v => v.id === b.versione_attiva)
+    if (attiva && !attiva.path) {  // brano importato senza audio: il file è il suo
+      ris = await collegaAudioDropbox(attiva.id, file, progresso)
+      if (info.stato || info.versione) await api('PATCH', `/api/versioni/${attiva.id}`, { ...(info.stato && { stato: info.stato }), ...(info.versione && { etichetta: info.versione }) })
+    } else ris = await nuovaVersioneDropbox(b.id, file, progresso)
+  } else {
+    const { blob, ext } = await preparaAudio(file)
+    const etichetta = info.versione || 'V1', stato = info.stato
+    const m = await Dbx.carica(`${cartellaBrano(p.titolo, info.titolo)}/${nomeVersione(etichetta, stato)}.${ext}`, blob, { progresso })
+    const bid = nuovoId(), vid = nuovoId(), ora = adesso(), pidX = p.id
+    Archivio.cambia(lb => {
+      const ordine = Math.max(-1, ...lb.brani.filter(x => x.progetto_id === pidX).map(x => x.ordine)) + 1
+      lb.brani.push({ id: bid, progetto_id: pidX, titolo: info.titolo, artista: info.artista || p.artista || '', ordine, versione_attiva: vid, nota: '', creato: ora, preferito: 0, preferito_il: null })
+      lb.versioni.push({ id: vid, brano_id: bid, etichetta, stato, path: m.path_display, nome_file: file.name, dimensione: blob.size, creato: ora })
+      tocca(lb, pidX)
+    })
+    ris = { brano_id: bid, versione_id: vid, blob }
+  }
+  return { ...ris, progetto_id: p.id, progetto: p.titolo, progettoNuovo, info }
 }
 
 // audio per una versione che non ce l'ha (brani importati rimasti senza file)
@@ -581,7 +653,7 @@ async function aggiornaScheda(pid) {
       const lk = await Dbx.linkPubblico(v.path)
       Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link = lk.diretto; x.link_url = lk.url } })
     }
-    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0)])
+    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || ''])
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)

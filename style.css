@@ -198,7 +198,7 @@ h1.titolo-grande { margin-left: 0; padding: 4px 0; overflow: hidden; text-overfl
 /* le colonne seguono la larghezza della lista (container query), non della finestra: col pannello aperto si stringono */
 .tl { padding: 0 24px; container-type: inline-size; }
 .pagina .tl { padding: 0; }
-.tr, .tl-testa { display: grid; grid-template-columns: 16px minmax(0, 4fr) 92px 48px 96px 104px 28px 76px 32px; gap: 16px; align-items: center; padding: 0 16px; }
+.tr, .tl-testa { display: grid; grid-template-columns: 16px minmax(0, 4fr) 128px 48px 96px 104px 28px 76px 32px; gap: 16px; align-items: center; padding: 0 16px; }
 .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 2fr) 92px 48px 96px 104px 28px 76px 32px; }
 .tl-testa { height: 36px; color: var(--tenue); font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
 .tl-testa svg { width: 15px; height: 15px; margin-left: auto; }
@@ -239,12 +239,12 @@ h1.titolo-grande { margin-left: 0; padding: 4px 0; overflow: hidden; text-overfl
 .tr.linea-sopra::before { top: -1px; }
 .tr.linea-sotto::after { bottom: -1px; }
 @container (max-width: 1000px) {
-  .tr, .tl-testa { grid-template-columns: 16px minmax(0, 4fr) 80px 44px 88px 28px 64px 32px; }
+  .tr, .tl-testa { grid-template-columns: 16px minmax(0, 4fr) 118px 44px 88px 28px 64px 32px; }
   .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 2fr) 80px 44px 88px 28px 64px 32px; }
   .nasc2 { display: none; }
 }
 @container (max-width: 760px) {
-  .tr, .tl-testa, .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 1fr) 64px 28px 60px 32px; gap: 12px; }
+  .tr, .tl-testa, .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 1fr) 104px 28px 60px 32px; gap: 12px; }
   .nasc, .tr .prog, .tl-testa .prog { display: none; }
 }
 @container (max-width: 480px) {
@@ -449,3 +449,22 @@ body.ospite .tr .cuore, body.ospite .tr .altro { visibility: hidden; }
 .menu.finestra .fila-c button { width: auto; text-align: center; }
 body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.ospite .tl-testa .nasc2 { visibility: hidden; }
 .testa .meta .condiviso { color: var(--accento); }
+
+/* stato delle versioni (24/10): DEMO PROD REC PREMIX MIX MASTER, tendina colorata */
+.stato { appearance: none; -webkit-appearance: none; border: 0; border-radius: 10px; padding: 2px 8px; margin-left: 6px; font-size: 10px; font-weight: 800;
+  letter-spacing: .06em; background: #2a2a2a; color: var(--tenue); cursor: pointer; outline: none; font-style: normal; }
+.stato:hover { filter: brightness(1.25); }
+.stato option { background: #282828; color: #fff; }
+.stato[data-s=demo] { background: #3a3a3a; color: #e0e0e0; }
+.stato[data-s=prod] { background: #1d3b7a; color: #b9cdfb; }
+.stato[data-s=rec] { background: #7a1d24; color: #ffc4c8; }
+.stato[data-s=premix] { background: #7a4a12; color: #ffd9a8; }
+.stato[data-s=mix] { background: #4c2a85; color: #dccbff; }
+.stato[data-s=master] { background: #155e36; color: #b6f5cf; }
+.tr .ver { display: flex; align-items: center; }
+.ver-nome { display: flex; align-items: center; min-width: 0; }
+.ver-riga { grid-template-columns: 28px minmax(0, 1fr) auto auto auto; row-gap: 0; }
+.ver-riga .muted { font-size: 11px; grid-column: 2 / -1; grid-row: 2; margin-top: -2px; }
+.ver-riga .link-btn { font-size: 11px; white-space: nowrap; }
+.ver-riga .ver-nome .campo { width: 52px; flex: none; }
+.pn-artista { font-size: 14px; color: var(--tenue); margin: -2px 0 2px -6px; }

@@ -264,8 +264,8 @@ function benvenuto(msg = '') {
 // i dati di un link d'ascolto: {t: titolo, a: artista, s: sfondo, c: cover, b: [[titolo, url, durata, tonalità, bpm], ...]}
 function libOspite(d) {
   const ora = Date.now() / 1000
-  const brani = (d.b || []).map(([titolo, url, durata, key, bpm], i) => ({ id: i + 10, progetto_id: 1, titolo, ordine: i, creato: ora,
-    preferito: 0, versione_id: i + 1000, etichetta: '', bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
+  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
+    preferito: 0, versione_id: i + 1000, etichetta: '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
   const p = { id: 1, titolo: d.t || 'Progetto', artista: d.a || '', nota: '', cover: d.c ? 'condivisa' : null, coverUrl: d.c, sfondo: d.s || 1,
     fissato: 0, cartella_id: null, creato: ora, modificato: ora, n_brani: brani.length, senza_audio: 0,
     durata: brani.reduce((s, b) => s + (b.durata || 0), 0) }
@@ -332,17 +332,22 @@ function tracklist(brani, { multi = false, ordinabile = false } = {}) {
     <div class="tl-testa"><span>#</span><span>Titolo</span>${multi ? '<span class="prog">Progetto</span>' : ''}<span class="ver">Versione</span><span class="nasc">BPM</span><span class="nasc">Tonalità</span><span class="nasc2">Aggiunto</span><span></span><span class="dx">${IC.orologio}</span><span></span></div>
     ${brani.map((b, i) => rigaBrano(b, i, multi, ordinabile)).join('')}</div>`
 }
+// stato della versione (DEMO ... MASTER): tendina colorata, si cambia al volo
+const STATI_UI = ['demo', 'prod', 'rec', 'premix', 'mix', 'master']
+const sceltaStato = (vid, stato) => vid ? `<select class="stato" data-s="${stato || ''}" data-stato-v="${vid}" title="Stato">
+  <option value="">—</option>${STATI_UI.map(s => `<option value="${s}" ${s === stato ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>` : ''
+
 function rigaBrano(b, i, multi, ordinabile) {
   const x = S.info.get(b.id), p = S.perId.get(b.progetto_id), c = S.coda[S.i]
   const ora = c && c.bid === b.id, suona = ora && !A.paused
-  const sotto = [x.interprete, x.autori.join(', ')].filter(Boolean).join(' · ')
+  const sotto = [b.artista || x.interprete, x.autori.join(', ')].filter(Boolean).join(' · ')
   // il link dell'audio si chiede prima del clic: così il play parte subito (e su iPhone parte davvero)
   if (b.audio && !S.ospite) Dbx.linkSubito(Archivio.percorso(b.versione_id))
   return `<div class="tr ${b.audio ? '' : 'muto'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
     <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${b.audio ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
     <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><b>${esc(x.nome)}</b><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
-    <span class="ver">${esc(b.etichetta || '')}${b.nver > 1 ? ` <small>di ${b.nver}</small>` : ''}</span>
+    <span class="ver">${esc(b.etichetta || '')}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
     <span class="nasc ${b.tonalita ? '' : 'auto'}">${esc(keyDi(b))}</span>
     <span class="nasc2">${quando(b.creato)}</span>
@@ -416,7 +421,7 @@ function pagCerca() {
   }
   const progetti = S.lib.progetti.filter(p => norm(p.titolo + ' ' + p.artista).includes(q))
   const autori = S.autori.filter(a => norm(a.nome).includes(q))
-  const brani = S.lib.brani.filter(b => norm(b.titolo).includes(q))
+  const brani = S.lib.brani.filter(b => norm(b.titolo + ' ' + (b.artista || '')).includes(q))
   if (!progetti.length && !autori.length && !brani.length) {
     return `<div class="pagina sopra"><div class="vuoto"><b>Nessun risultato per “${esc(testo)}”</b>Controlla l'ortografia o prova un'altra parola.</div></div>`
   }
@@ -562,9 +567,10 @@ function pannello() {
     ${coverHtml(p, 'pn-cover')}
     <canvas id="onda-pn" data-v="${v.id}" title="${v.audio ? 'Clicca per ascoltare da qui' : ''}"></canvas>
     <div class="pn-tempi"><span id="pn-ora">${suonaQuesta ? tempo(A.currentTime) : '0:00'}</span><span>${tempo(v.durata)}</span></div>
-    <div class="pn-titolo"><input class="campo" data-brano="titolo" value="${esc(b.titolo)}" spellcheck="false" title="Titolo completo: TITOLO - Interprete (Autori)">
+    <div class="pn-titolo"><input class="campo" data-brano="titolo" value="${esc(b.titolo)}" spellcheck="false" title="Titolo (gli autori tra parentesi in fondo)">
       <button class="ic cuore ${lb.preferito ? 'on' : ''}" data-az="cuore" data-arg="${b.id}">${lb.preferito ? IC.cuorePieno : IC.cuore}</button></div>
-    <p class="pn-sotto">${[x.interprete && esc(x.interprete), ...x.autori.map(a => `<a href="#/autore/${encodeURIComponent(norm(a))}">${esc(a)}</a>`)].filter(Boolean).join(', ') || esc(p.titolo)}</p>
+    <input class="campo pn-artista" data-brano="artista" value="${esc(b.artista || '')}" placeholder="Artista" spellcheck="false">
+    <p class="pn-sotto">${[!b.artista && x.interprete && esc(x.interprete), ...x.autori.map(a => `<a href="#/autore/${encodeURIComponent(norm(a))}">${esc(a)}</a>`)].filter(Boolean).join(', ') || (b.artista ? '' : esc(p.titolo))}</p>
     <div class="carta"><h3>Info</h3>
       <div class="pn-meta">
         <label>BPM<input class="campo" data-versione="bpm" inputmode="decimal" value="${v.bpm ?? ''}" placeholder="${v.bpm_auto ? Math.round(v.bpm_auto) + ' (auto)' : '—'}"></label>
@@ -576,7 +582,7 @@ function pannello() {
       <div class="versioni">${b.versioni.slice().reverse().map(y => `
         <div class="ver-riga ${c && c.vid === y.id ? 'in-ascolto' : ''}" data-v="${y.id}">
           ${y.audio ? `<button class="ic" data-az="suona-versione" title="Ascolta questa versione">${c && c.vid === y.id && !A.paused ? IC.pausa : IC.play}</button>` : '<span></span>'}
-          <input class="campo" data-etichetta value="${esc(y.etichetta)}" spellcheck="false">
+          <span class="ver-nome"><input class="campo" data-etichetta value="${esc(y.etichetta)}" spellcheck="false">${sceltaStato(y.id, y.stato)}</span>
           <span class="muted">${quando(y.creato)}${y.durata ? ' · ' + tempo(y.durata) : ''}${y.commenti.length ? ' · ' + y.commenti.length + ' comm.' : ''}</span>
           ${y.id === v.id ? '<span class="attiva-tag">attiva</span>' : '<button class="link-btn" data-az="rendi-attiva">Rendi attiva</button>'}
           ${y.audio ? `<button class="ic" data-az="scarica" title="Scarica l'originale">${IC.scarica}</button>` : '<button class="link-btn" data-az="collega">Carica audio</button>'}
@@ -749,7 +755,7 @@ function disegnaPlayer() {
   cov.style.backgroundImage = uc ? `url('${uc}')` : ''
   $('#pl-titolo').textContent = x.nome + (b && b.nver > 1 && c.etichetta ? ` (${c.etichetta})` : '')
   $('#pl-titolo').href = `#/progetto/${c.pid}`
-  $('#pl-sub').textContent = [x.interprete, ...x.autori].filter(Boolean).join(', ') || (p && p.titolo) || ''
+  $('#pl-sub').textContent = [(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p && p.titolo) || ''
   const cu = $('#pl-cuore')
   cu.classList.toggle('on', !!(b && b.preferito))
   cu.innerHTML = b && b.preferito ? IC.cuorePieno : IC.cuore
@@ -1025,25 +1031,27 @@ function rigaCaricamento(nome) {
 const ordinaFile = files => files.filter(f => AUDIO_EXT.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, 'it', { numeric: true }))
 const chiaveFile = nome => norm(nome.replace(/\.[^.]+$/, '').replace(/_/g, ' '))
 
-// su un progetto: i file col titolo di un brano senza audio (importati da untitled) gli si collegano, gli altri diventano brani nuovi
-async function caricaBrani(pid, files) {
+// ogni file va al suo posto leggendo il nome ("Dhome - Fuggire da te MASTER V3"): progetto dell'artista, brano, stato, versione.
+// pid: dentro un progetto i file restano lì; cartella: nome della cartella trascinata, vale come artista se il file non lo dice
+async function caricaBrani(pid, files, cartella = '') {
   files = ordinaFile(files)
   if (!files.length) return avviso('Nessun file audio (wav, aiff, mp3, m4a, flac)', true)
-  const senzaAudio = new Map(braniDi(pid).filter(b => !b.audio).map(b => [norm(b.titolo), b.versione_id]))
-  let fatti = 0
+  const dove = new Map()
   for (const f of files) {
     const r = rigaCaricamento(f.name)
     try {
-      const vid = senzaAudio.get(chiaveFile(f.name))
-      const ris = vid ? await collegaAudioDropbox(vid, f, r.avanza) : await nuovoBranoDropbox(pid, f, r.avanza)
-      if (vid) senzaAudio.delete(chiaveFile(f.name))
-      fatti++
+      const ris = await caricaBounce(f, { pid, artistaDefault: cartella, progresso: r.avanza })
+      dove.set(ris.progetto_id, (dove.get(ris.progetto_id) || 0) + 1)
       await ricarica()  // il brano compare subito; durata, waveform, BPM e tonalità arrivano dall'analisi
       analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
     } catch (e) { sbaglio(e) }
     r.fine()
   }
-  if (fatti) avviso(fatti === 1 ? 'Brano caricato su Dropbox' : `${fatti} brani caricati su Dropbox`)
+  if (!dove.size) return
+  const n = [...dove.values()].reduce((a, b) => a + b, 0)
+  avviso(`${n === 1 ? 'Brano caricato' : n + ' brani caricati'} in ${[...dove.keys()].map(id => S.perId.get(id)?.titolo).join(', ')}`)
+  // caricando fuori da un progetto si va dove sono finiti (se è uno solo)
+  if (!pid && dove.size === 1) location.hash = `#/progetto/${[...dove.keys()][0]}`
 }
 
 async function caricaVersione(bid, file, collegaA = null) {
@@ -1229,9 +1237,7 @@ document.addEventListener('drop', async e => {
       return caricaVersione(b.id, audio[0], b.audio ? null : b.versione_id)
     }
     if (vista === 'progetto') return caricaBrani(+arg, files)
-    if (!ordinaFile(files).length) return avviso('Nessun file audio', true)
-    const pid = await nuovoProgetto({ titolo: cartella || 'Nuovo progetto' })
-    await caricaBrani(pid, files)
+    await caricaBrani(null, files, cartella || '')
   } catch (err) { sbaglio(err) }
 })
 
@@ -1272,7 +1278,7 @@ $('#principale').addEventListener('drop', async e => {
 // su una riga: un clic seleziona, doppio clic suona (come Spotify); sul telefono basta un tocco
 document.addEventListener('dblclick', e => {
   const r = e.target.closest('.tr')
-  if (!r || e.target.closest('button, a')) return
+  if (!r || e.target.closest('button, a, select')) return
   const b = S.perBrano.get(+r.dataset.b)
   if (b.audio) suonaBrano(b.id)
   else scegliAudio(false, f => caricaVersione(b.id, f[0], b.versione_id))
@@ -1334,9 +1340,10 @@ document.addEventListener('click', async e => {
       case 'nuovo-progetto': e.preventDefault(); return nuovoProgetto()
       case 'crea': {
         const r = t.getBoundingClientRect()
-        return menu(r.left, r.bottom + 6, [{ testo: 'Nuovo progetto', az: 'nuovo-progetto' }, { testo: 'Nuova cartella', az: 'nuova-cartella' }])
+        return menu(r.left, r.bottom + 6, [{ testo: 'Carica brani…', az: 'carica-auto' }, '-', { testo: 'Nuovo progetto', az: 'nuovo-progetto' }, { testo: 'Nuova cartella', az: 'nuova-cartella' }])
       }
       case 'nuova-cartella': return nuovaCartella()
+      case 'carica-auto': return scegliAudio(true, f => caricaBrani(null, f))
       case 'filtro': S.filtro = arg; return ridisegna()
       case 'menu-progetto': return menuProgetto(t)
       case 'aggiungi': return scegliAudio(true, f => caricaBrani(pid, f))
@@ -1427,6 +1434,10 @@ document.addEventListener('change', async e => {
     } else if (el.matches('[data-etichetta]')) {
       if (!el.value.trim()) return
       await api('PATCH', `/api/versioni/${+el.closest('.ver-riga').dataset.v}`, { etichetta: el.value.trim() })
+    } else if (el.dataset.statoV) {
+      el.dataset.s = el.value
+      await api('PATCH', `/api/versioni/${+el.dataset.statoV}`, { stato: el.value || null })
+      el.blur()
     } else return
     await ricarica()
   } catch (err) { sbaglio(err) }
@@ -1466,7 +1477,7 @@ $('#lib-chips').addEventListener('click', e => {
 $('#lib-piu').addEventListener('click', e => {
   e.stopPropagation()
   const r = e.currentTarget.getBoundingClientRect()
-  menu(r.left, r.bottom + 6, [{ testo: 'Nuovo progetto', az: 'nuovo-progetto' }, { testo: 'Nuova cartella', az: 'nuova-cartella' }])
+  menu(r.left, r.bottom + 6, [{ testo: 'Carica brani…', az: 'carica-auto' }, '-', { testo: 'Nuovo progetto', az: 'nuovo-progetto' }, { testo: 'Nuova cartella', az: 'nuova-cartella' }])
 })
 
 // icone statiche
