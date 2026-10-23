@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Bounces">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icona-180.png">
+<link rel="icon" href="icona-180.png">
+<link rel="stylesheet" href="style.css">
+<title>Bounces</title>
+</head>
+<body>
+<!-- Bounces (23/10): Inediti messo online. Grafica Spotify; tutti i dati nel Dropbox di chi la usa (archivio.js) -->
+<header id="barra">
+  <a class="logo" href="#/">[bounces]</a>
+  <div class="barra-centro">
+    <a id="vai-home" class="tondo-scuro" href="#/" title="Home"></a>
+    <label class="cerca"><span id="ic-cerca"></span><input id="cerca" type="search" placeholder="Cosa vuoi ascoltare?" autocomplete="off" spellcheck="false"></label>
+  </div>
+  <div class="barra-dx"><button id="account" class="avatar-account" title="Account" hidden></button></div>
+</header>
+
+<aside id="lato" class="riquadro">
+  <div class="lib-testa">
+    <a href="#/libreria" class="lib-titolo"><span id="ic-libreria"></span>La tua libreria</a>
+    <button id="lib-piu" class="ic tondo-ic" title="Crea"></button>
+  </div>
+  <div class="chips" id="lib-chips">
+    <button data-filtro="progetti">Progetti</button>
+    <button data-filtro="autori">Autori</button>
+    <button data-filtro="cartelle">Cartelle</button>
+  </div>
+  <nav id="lib-lista"></nav>
+</aside>
+
+<main id="principale" class="riquadro"></main>
+
+<aside id="pannello" class="riquadro" hidden></aside>
+
+<footer id="player">
+  <div class="pl-sx">
+    <div id="pl-cover" class="cover"></div>
+    <div class="pl-testi"><a id="pl-titolo"></a><span id="pl-sub"></span></div>
+    <button id="pl-cuore" class="ic cuore" title="Preferiti"></button>
+  </div>
+  <div class="pl-centro">
+    <div class="pl-tasti">
+      <button id="pl-casuale" class="ic" title="Riproduzione casuale"></button>
+      <button id="pl-prec" class="ic" title="Precedente (Maiusc + ←)"></button>
+      <button id="pl-play" class="pl-play" title="Play / pausa (spazio)"></button>
+      <button id="pl-succ" class="ic" title="Successivo (Maiusc + →)"></button>
+      <button id="pl-loop" class="ic" title="Ripeti il brano"></button>
+    </div>
+    <div class="pl-barra">
+      <span id="pl-ora">0:00</span>
+      <div id="barra-tempo" class="slider"><div class="binario"><div class="riempito"></div></div><div class="punti"></div></div>
+      <span id="pl-tot">0:00</span>
+    </div>
+  </div>
+  <div class="pl-dx">
+    <button id="pl-pannello" class="ic" title="In riproduzione"></button>
+    <button id="pl-muto" class="ic" title="Muto"></button>
+    <div id="barra-volume" class="slider"><div class="binario"><div class="riempito"></div></div></div>
+  </div>
+</footer>
+
+<nav id="schede">
+  <a href="#/" data-scheda=""><span></span>Home</a>
+  <a href="#/cerca" data-scheda="cerca"><span></span>Cerca</a>
+  <a href="#/libreria" data-scheda="libreria"><span></span>La tua libreria</a>
+</nav>
+
+<div id="caricamenti"></div>
+<div id="avvisi"></div>
+<input id="scegli-audio" type="file" accept="audio/*,.wav,.aif,.aiff,.mp3,.m4a,.flac" multiple hidden>
+<input id="scegli-cover" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+<script src="archivio.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
