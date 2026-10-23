@@ -599,8 +599,47 @@ function pannello() {
 }
 
 // --- player ---
-const A = new Audio()
+// A è il brano che suona. I wav sono pesanti e Dropbox ci mette un attimo a dare il primo pezzo: per far partire
+// il play subito si tengono pronti in anticipo (senza toccare la qualità) il brano sotto il mouse e il prossimo della coda
+let A = new Audio()
 A.preload = 'auto'
+const pronti = new Map()  // vid → <audio> già in caricamento
+const MAX_PRONTI = 3
+
+function prepara(vid) {
+  if (!vid || pronti.has(vid) || S.coda[S.i]?.vid === vid) return
+  const crea = url => {
+    if (!url || pronti.has(vid)) return
+    const el = new Audio()
+    el.preload = 'auto'
+    el.src = url
+    el.load()
+    pronti.set(vid, el)
+    while (pronti.size > MAX_PRONTI) {
+      const [vecchio, x] = pronti.entries().next().value
+      x.removeAttribute('src'); x.load()
+      pronti.delete(vecchio)
+    }
+  }
+  const subito = sorgenteSubito(vid)
+  if (subito) crea(subito)
+  else if (!S.ospite && Archivio.percorso(vid)) sorgente(vid).then(crea, () => {})
+}
+
+// il player passa a un <audio> già pronto: gli ascoltatori di eventi si spostano con lui
+const EVENTI = {}
+function usa(el) {
+  if (el === A) return
+  const vecchio = A
+  for (const [nome, f] of Object.entries(EVENTI)) { vecchio.removeEventListener(nome, f); el.addEventListener(nome, f) }
+  el.volume = vecchio.volume
+  el.muted = vecchio.muted
+  vecchio.pause()
+  vecchio.removeAttribute('src')
+  vecchio.load()
+  A = el
+}
+const quandoPronto = f => A.readyState >= 1 ? f() : A.addEventListener('loadedmetadata', f, { once: true })
 
 function voce(b, v) {
   return { pid: b.progetto_id, bid: b.id, vid: v ? v.id : b.versione_id, etichetta: v ? v.etichetta : b.etichetta, durata: v ? v.durata : b.durata }
@@ -623,13 +662,14 @@ function suonaBrano(bid, vid = null) {
   if (c && c.bid === bid && (!vid || c.vid === vid)) return A.paused ? A.play() : A.pause()
   const { vista, arg } = rotta()
   const b = S.perBrano.get(bid)
-  const ctx = vista === 'autore' ? 'autore:' + arg : vista === 'preferiti' ? 'preferiti' : 'progetto:' + b.progetto_id
-  if (!braniContesto(ctx).some(x => x.id === bid)) return suonaContesto('progetto:' + b.progetto_id, bid)
-  suonaContesto(ctx, bid)
-  if (vid) {  // una versione diversa dall'attiva
-    const v = S.pann && S.pann.prog.brani.find(x => x.id === bid)?.versioni.find(x => x.id === vid)
-    if (v) { S.coda[S.i] = voce(b, v); vai(S.i) }
-  }
+  let ctx = vista === 'autore' ? 'autore:' + arg : vista === 'preferiti' ? 'preferiti' : 'progetto:' + b.progetto_id
+  if (!braniContesto(ctx).some(x => x.id === bid)) ctx = 'progetto:' + b.progetto_id
+  // una versione diversa dall'attiva entra in coda al posto dell'attiva
+  const v = vid && vid !== b.versione_id && S.pann && S.pann.prog.brani.find(x => x.id === bid)?.versioni.find(x => x.id === vid)
+  S.contesto = ctx
+  S.coda = braniContesto(ctx).filter(x => x.audio).map(x => (v && x.id === bid ? voce(x, v) : voce(x)))
+  if (v && !S.coda.some(x => x.bid === bid)) S.coda.push(voce(b, v))
+  vai(Math.max(0, S.coda.findIndex(x => x.bid === bid)))
 }
 
 async function vai(i) {
@@ -637,14 +677,30 @@ async function vai(i) {
   S.i = i
   const c = S.coda[i]
   S.dett = null
-  const pronto = sorgenteSubito(c.vid)
-  if (pronto) { A.src = pronto; A.play().catch(() => {}) }
-  ridisegna()
-  if (!pronto) {
-    try { A.src = await sorgente(c.vid) } catch (e) { return sbaglio(e) }
-    if (S.coda[S.i] !== c) return
+  const giaPronto = pronti.get(c.vid), salto = S.saltaDopo
+  S.saltaDopo = null
+  const parti = () => {
     A.play().catch(() => {})
+    if (salto != null) quandoPronto(() => salta(salto))
+    if (!S.casuale && S.coda[i + 1]) prepara(S.coda[i + 1].vid)  // il prossimo si carica mentre questo suona
   }
+  if (giaPronto) {
+    pronti.delete(c.vid)
+    usa(giaPronto)
+    A.currentTime = 0
+    parti()
+    tempi()
+  } else {
+    const subito = sorgenteSubito(c.vid)
+    if (subito) { A.src = subito; parti() }
+    else {
+      ridisegna()
+      try { A.src = await sorgente(c.vid) } catch (e) { return sbaglio(e) }
+      if (S.coda[S.i] !== c) return
+      parti()
+    }
+  }
+  ridisegna()
   if (S.ospite) return
   try { S.dett = await api('GET', `/api/versioni/${c.vid}`) } catch {}
   if (S.coda[S.i] === c) disegnaPunti()
@@ -755,16 +811,31 @@ function giro() {
   tempi()
   if (!A.paused) requestAnimationFrame(giro)
 }
-A.addEventListener('play', () => { ridisegna(); requestAnimationFrame(giro) })
-A.addEventListener('pause', () => ridisegna())
-A.addEventListener('timeupdate', () => { if (A.paused) tempi() })
-A.addEventListener('loadedmetadata', () => { tempi(); disegnaPunti() })
-A.addEventListener('ended', () => {
-  if (S.loop) { A.currentTime = 0; A.play(); return }
-  if (S.casuale || S.i < S.coda.length - 1) prossimo()
-  else ridisegna()
+Object.assign(EVENTI, {
+  play: () => { ridisegna(); requestAnimationFrame(giro) },
+  pause: () => ridisegna(),
+  timeupdate: () => { if (A.paused) tempi() },
+  loadedmetadata: () => { tempi(); disegnaPunti() },
+  ended: () => {
+    if (S.loop) { A.currentTime = 0; A.play(); return }
+    if (S.casuale || S.i < S.coda.length - 1) prossimo()
+    else ridisegna()
+  },
+  error: () => { if (S.coda[S.i] && A.getAttribute('src')) avviso('Non riesco a riprodurre questo file', true) },
 })
-A.addEventListener('error', () => { if (S.coda[S.i] && A.src) avviso('Non riesco a riprodurre questo file', true) })
+for (const [nome, f] of Object.entries(EVENTI)) A.addEventListener(nome, f)
+
+// passando sopra un brano (o toccandolo) il suo audio inizia a caricarsi: al clic parte subito
+let attesaPrepara = 0
+document.addEventListener('pointerover', e => {
+  const r = e.target.closest?.('.tr, [data-suona]')
+  if (!r) return
+  clearTimeout(attesaPrepara)
+  attesaPrepara = setTimeout(() => {
+    if (r.dataset.suona) { const b = braniContesto(r.dataset.suona).find(x => x.audio); if (b) prepara(b.versione_id) }
+    else { const b = S.lib && S.lib.brani.find(x => x.id === +r.dataset.b); if (b && b.audio) prepara(b.versione_id) }
+  }, 120)
+})
 window.addEventListener('resize', disegnaOndaPannello)
 
 function salta(secondi) {
@@ -801,8 +872,8 @@ slider($('#barra-volume'), volume)
     const o = S.pannOnda, c = S.coda[S.i], x = frazione(cv, e)
     if (c && c.vid === o.vid) { giu = true; cv.setPointerCapture(e.pointerId); salta(x * (A.duration || o.durata)) }
     else {
+      S.saltaDopo = x * (o.durata || 0)
       suonaBrano(o.bid, o.vid)
-      A.addEventListener('loadedmetadata', () => salta(x * A.duration), { once: true })
     }
   })
   document.addEventListener('pointermove', e => {
@@ -1215,7 +1286,7 @@ document.addEventListener('click', async e => {
     if (t.dataset.suona) { e.preventDefault(); e.stopPropagation(); return suonaContesto(t.dataset.suona) }
     if (t.dataset.t !== undefined) {
       const o = S.pannOnda, c = S.coda[S.i]
-      if (!c || c.vid !== o.vid) { suonaBrano(o.bid, o.vid); A.addEventListener('loadedmetadata', () => salta(+t.dataset.t), { once: true }) }
+      if (!c || c.vid !== o.vid) { S.saltaDopo = +t.dataset.t; suonaBrano(o.bid, o.vid) }
       else salta(+t.dataset.t)
       return
     }
