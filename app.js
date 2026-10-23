@@ -246,7 +246,7 @@ window.addEventListener('hashchange', mostra)
 function benvenuto(msg = '') {
   document.body.classList.add('fuori')
   $('#principale').innerHTML = `<div class="benvenuto">
-    <div class="logo-grande">[bounces]</div>
+    <div class="logo-grande">BOUNCES</div>
     <h1>Tutti i tuoi bounce, in un posto solo.</h1>
     <p>Progetti, versioni, commenti al minuto e link d'ascolto per gli artisti. I file restano nel tuo Dropbox,
       in una cartella tutta per Bounces: l'app non vede nient'altro.</p>
@@ -476,7 +476,7 @@ function pagAscolta() {
     <div class="dopo-testa" style="--c:${col}">
       <div class="azioni">${bottonePlay('progetto:' + p.id, brani)}</div>
       ${tracklist(brani)}
-      <p class="nota-ospite">Brani inediti condivisi con [bounces]. Sono qui per l'ascolto: non girare il link.</p>
+      <p class="nota-ospite">Brani inediti condivisi con BOUNCES. Sono qui per l'ascolto: non girare il link.</p>
     </div>`
 }
 
