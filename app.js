@@ -1294,6 +1294,7 @@ function finestraLink(link) {
   chiudiMenu()
   const m = document.createElement('div')
   m.className = 'menu finestra'
+  if (telefono()) { const fondo = document.createElement('div'); fondo.className = 'foglio-fondo'; document.body.append(fondo) }
   m.innerHTML = `<div class="titoletto">Link d'ascolto</div>
     <p>Chi lo apre ascolta i brani di questo progetto, senza account e senza poterli modificare. Il link resta sempre lo stesso:
       quando carichi una versione nuova o aggiungi brani, chi lo riapre sente gli aggiornamenti. Lo spegni dal menu ⋯ → Interrompi condivisione.</p>

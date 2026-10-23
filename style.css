@@ -660,3 +660,13 @@ body.ospite .tr .ver { visibility: visible; }
   .benvenuto h1 { font-size: 24px; }
   .benvenuto p { font-size: 15px; }
 }
+/* fogli dal basso centrati (24/10): voci centrate come i menu di iPhone, foglio centrato anche su schermi larghi */
+@media (max-width: 760px) {
+  .menu.foglio, .menu.finestra { left: 0 !important; right: 0 !important; margin: 0 auto; width: 100%; max-width: 520px; transform: none !important; text-align: center; }
+  .menu.foglio button { text-align: center; }
+  .menu.foglio .titoletto, .menu.finestra .titoletto { text-align: center; }
+  .menu.finestra p { text-align: center; }
+  .menu.finestra input { text-align: center; }
+  .menu.finestra .fila-c { justify-content: center; }
+  @keyframes sale { from { opacity: .3; translate: 0 40%; } to { opacity: 1; translate: 0 0; } }
+}
