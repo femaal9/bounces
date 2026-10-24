@@ -386,7 +386,7 @@ function rigaBrano(b, i, multi, ordinabile) {
     <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${b.audio ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
     <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
-    <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4">`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
+    <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4"><span class="ver-et">${esc(b.etichetta || '')}</span>`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
     <span class="nasc ${b.tonalita ? '' : 'auto'}">${esc(keyDi(b))}</span>
     <span class="nasc2">${quando(b.creato)}</span>

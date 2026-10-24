@@ -451,7 +451,7 @@ body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.o
 .testa .meta .condiviso { color: var(--accento); }
 
 /* stato delle versioni (24/10): DEMO PROD REC PREMIX MIX MASTER, tendina colorata */
-.stato { appearance: none; -webkit-appearance: none; border: 0; border-radius: 10px; padding: 2px 8px; margin-left: 6px; font-size: 10px; font-weight: 800;
+.stato { appearance: none; -webkit-appearance: none; border: 0; border-radius: 10px; padding: 2px 8px 2px calc(8px + .06em); margin-left: 6px; text-align: center; text-align-last: center; font-size: 10px; font-weight: 800;
   letter-spacing: .06em; background: #2a2a2a; color: var(--tenue); cursor: pointer; outline: none; font-style: normal; }
 .stato:hover { filter: brightness(1.25); }
 .stato option { background: #282828; color: #fff; }
@@ -482,6 +482,7 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 #lato .voce.sopra-file { outline: 2px solid var(--accento); outline-offset: -2px; }
 /* numero di versione modificabile nella lista (24/10) */
 .tr .ver-num { width: 44px; flex: none; padding: 1px 4px; margin-left: -4px; font-size: 13px; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.tr .ver-et { display: none; }
 .tr .ver-num:hover { background: rgba(255,255,255,.08); }
 .tr .ver-num:focus { background: var(--campo); color: var(--testo); }
 
@@ -540,6 +541,8 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
   .tr .n, .tr .dx, .tr .nasc, .tr .nasc2, .tr .prog, .tr .matita, .tr .ver .ver-num { display: none !important; }
   .tr .ver { display: flex !important; }
   .tr .ver .stato { margin-left: 0; }
+  /* la versione (V1, V2...) si legge anche da telefono, accanto allo stato */
+  .tr .ver .ver-et { display: inline; margin-right: 6px; font-size: 12px; color: var(--tenue); font-variant-numeric: tabular-nums; }
   .tr .cuore, .tr .altro { visibility: visible; }
   .tr .cover.mini { width: 44px; height: 44px; }
   .tl { padding: 0 12px; }
