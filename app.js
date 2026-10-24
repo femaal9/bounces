@@ -373,8 +373,9 @@ const etichettaVersione = t => { const m = t.trim().match(/^v?\s*(\d{1,3})$/i); 
 
 // stato della versione (DEMO ... MASTER): tendina colorata, si cambia al volo
 const STATI_UI = ['demo', 'prod', 'rec', 'premix', 'mix', 'master']
-const sceltaStato = (vid, stato) => vid ? `<select class="stato" data-s="${stato || ''}" data-stato-v="${vid}" title="Stato">
-  <option value="">—</option>${STATI_UI.map(s => `<option value="${s}" ${s === stato ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select>` : ''
+// la scritta è uno span (centrata ovunque, anche su Safari); sopra c'è la tendina vera, invisibile
+const sceltaStato = (vid, stato) => vid ? `<span class="stato" data-s="${stato || ''}"><span>${stato ? stato.toUpperCase() : '—'}</span><select class="stato-sel" data-stato-v="${vid}" title="Stato">
+  <option value="">—</option>${STATI_UI.map(s => `<option value="${s}" ${s === stato ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}</select></span>` : ''
 
 function rigaBrano(b, i, multi, ordinabile) {
   const x = S.info.get(b.id), p = S.perId.get(b.progetto_id), c = S.coda[S.i]
@@ -696,7 +697,7 @@ function usa(el) {
 const quandoPronto = f => A.readyState >= 1 ? f() : A.addEventListener('loadedmetadata', f, { once: true })
 
 function voce(b, v) {
-  return { pid: b.progetto_id, bid: b.id, vid: v ? v.id : b.versione_id, etichetta: v ? v.etichetta : b.etichetta, durata: v ? v.durata : b.durata }
+  return { pid: b.progetto_id, bid: b.id, vid: v ? v.id : b.versione_id, etichetta: v ? v.etichetta : b.etichetta, stato: v ? v.stato : b.stato, durata: v ? v.durata : b.durata }
 }
 
 function suonaContesto(ctx, bid = null) {
@@ -731,7 +732,8 @@ async function vai(i) {
   S.i = i
   const c = S.coda[i]
   S.dett = null
-  const giaPronto = pronti.get(c.vid), salto = S.saltaDopo
+  // a schermo bloccato si resta sullo stesso <audio>: iOS non fa partire quello nuovo e perde i comandi
+  const giaPronto = document.hidden ? null : pronti.get(c.vid), salto = S.saltaDopo
   S.saltaDopo = null
   const parti = () => {
     A.play().catch(() => {})
@@ -802,6 +804,7 @@ function disegnaPlayer() {
   $('#pl-titolo').textContent = x.nome + (b && b.nver > 1 && c.etichetta ? ` (${c.etichetta})` : '')
   $('#pl-titolo').href = `#/progetto/${c.pid}`
   $('#pl-sub').textContent = [(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p && p.titolo) || ''
+  sessione(c, x, $('#pl-sub').textContent, p, uc)
   const cu = $('#pl-cuore')
   cu.classList.toggle('on', !!(b && b.preferito))
   cu.innerHTML = b && b.preferito ? IC.cuorePieno : IC.cuore
@@ -832,11 +835,11 @@ function disegnaSchermo() {
   el.style.setProperty('--c', coloreDi(p))
   el.innerHTML = `
     <div class="sc-testa"><button class="ic" data-sc="chiudi" title="Chiudi">${IC.giu}</button>
-      <div><small>${S.ospite ? 'In ascolto' : 'In riproduzione da'}</small><b>${esc(p ? p.titolo : '')}</b></div><span class="sc-vuoto"></span></div>
+      <div><small>${S.ospite ? 'In ascolto' : 'In riproduzione da'}</small><b>${esc(p ? p.titolo : '')}</b></div>${S.ospite ? '<span class="sc-vuoto"></span>' : `<button class="ic" data-sc="altro" title="Altro">${IC.altro}</button>`}</div>
     ${coverHtml(p, 'sc-cover')}
     <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}</span></div>
       ${S.ospite ? '' : `<button class="ic cuore ${b && b.preferito ? 'on' : ''}" data-sc="cuore">${b && b.preferito ? IC.cuorePieno : IC.cuore}</button>`}</div>
-    <canvas id="onda-sc"></canvas>
+    <div id="sc-barra"><div class="sc-binario"><div class="sc-pieno"></div></div></div>
     <div class="sc-tempi"><span id="sc-ora">0:00</span><span id="sc-tot">0:00</span></div>
     <div class="sc-tasti">
       <button class="ic ${S.casuale ? 'on' : ''}" data-sc="casuale" title="Casuale">${IC.casuale}</button>
@@ -845,7 +848,8 @@ function disegnaSchermo() {
       <button class="ic grande" data-sc="succ" title="Successivo">${IC.succ}</button>
       <button class="ic ${S.loop ? 'on' : ''}" data-sc="loop" title="Ripeti">${IC.loop}</button>
     </div>
-    ${S.ospite ? '' : '<button class="btn sc-dettagli" data-sc="dettagli">Versioni, note e commenti</button>'}`
+    ${S.ospite ? '' : `<button class="sc-dettagli" data-sc="dettagli"><b>Versioni, note e commenti</b>
+      <span>${esc([c.etichetta, ((b && b.versione_id === c.vid ? b.stato : c.stato) || '').toUpperCase(), b && b.nver > 1 ? b.nver + ' versioni' : ''].filter(Boolean).join(' · ') || 'Apri il brano')}</span></button>`}`
   tempiSchermo()
 }
 function tempiSchermo() {
@@ -854,7 +858,8 @@ function tempiSchermo() {
   const o = $('#sc-ora'), t = $('#sc-tot')
   if (o) o.textContent = tempo(A.currentTime)
   if (t) t.textContent = tempo(d)
-  disegnaOnda($('#onda-sc'), S.dett && c && S.dett.id === c.vid ? S.dett.picchi : null, d, d ? A.currentTime / d : 0)
+  const pieno = $('#sc-barra .sc-pieno')
+  if (pieno) pieno.style.width = (d ? Math.min(100, A.currentTime / d * 100) : 0) + '%'
 }
 $('#schermo').addEventListener('click', e => {
   const t = e.target.closest('[data-sc]'), c = S.coda[S.i]
@@ -868,15 +873,16 @@ $('#schermo').addEventListener('click', e => {
   if (az === 'casuale') return $('#pl-casuale').click()
   if (az === 'loop') return $('#pl-loop').click()
   if (az === 'cuore') return cuore(c.bid)
+  if (az === 'altro') return menuBrano(0, 0, c.bid)
   if (az === 'dettagli') { S.schermo = false; disegnaSchermo(); return apriBrano(c.bid, true) }
 })
-// sulla waveform grande ci si sposta col dito
+// sulla barra del player grande ci si sposta col dito (come Spotify)
 ;(() => {
   let giu = false
-  const vai = e => { const cv = $('#onda-sc'), c = S.coda[S.i]; if (!cv || !c) return; const r = cv.getBoundingClientRect(); salta(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (A.duration || c.durata || 0)) }
-  $('#schermo').addEventListener('pointerdown', e => { if (!e.target.closest('#onda-sc')) return; giu = true; e.target.setPointerCapture(e.pointerId); vai(e) })
+  const vai = e => { const cv = $('#sc-barra'), c = S.coda[S.i]; if (!cv || !c) return; const r = cv.getBoundingClientRect(); salta(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (A.duration || c.durata || 0)) }
+  $('#schermo').addEventListener('pointerdown', e => { if (!e.target.closest('#sc-barra')) return; giu = true; $('#sc-barra').classList.add('giu'); e.target.setPointerCapture(e.pointerId); vai(e) })
   $('#schermo').addEventListener('pointermove', e => { if (giu) vai(e) })
-  $('#schermo').addEventListener('pointerup', () => { giu = false })
+  $('#schermo').addEventListener('pointerup', () => { giu = false; $('#sc-barra')?.classList.remove('giu') })
 })()
 
 function disegnaPunti() {
@@ -950,7 +956,8 @@ Object.assign(EVENTI, {
   play: () => { ridisegna(); requestAnimationFrame(giro) },
   pause: () => ridisegna(),
   timeupdate: () => { if (A.paused) tempi() },
-  loadedmetadata: () => { tempi(); disegnaPunti() },
+  loadedmetadata: () => { tempi(); disegnaPunti(); posizioneSessione() },
+  seeked: () => posizioneSessione(),
   ended: () => {
     if (S.loop) { A.currentTime = 0; A.play(); return }
     if (S.casuale || S.i < S.coda.length - 1) prossimo()
@@ -959,6 +966,36 @@ Object.assign(EVENTI, {
   error: () => { if (S.coda[S.i] && A.getAttribute('src')) avviso('Non riesco a riprodurre questo file', true) },
 })
 for (const [nome, f] of Object.entries(EVENTI)) A.addEventListener(nome, f)
+
+// schermata di blocco e Centro di controllo (25/10, Matteo): titolo, copertina e tasti brano precedente/successivo.
+// Senza questi iOS mostra solo "indietro/avanti di 10 secondi"
+if (navigator.mediaSession) {
+  const MS = navigator.mediaSession
+  const az = (nome, f) => { try { MS.setActionHandler(nome, f) } catch {} }
+  az('play', () => A.play())
+  az('pause', () => A.pause())
+  az('previoustrack', () => $('#pl-prec').click())
+  az('nexttrack', () => prossimo())
+  az('seekto', d => salta(d.seekTime))
+  az('seekbackward', null)  // niente ±10 s: al loro posto iOS mette i tasti dei brani
+  az('seekforward', null)
+}
+function sessione(c, x, sub, p, uc) {
+  const MS = navigator.mediaSession
+  if (!MS) return
+  try {
+    MS.metadata = new MediaMetadata({ title: x.nome + (c.etichetta ? ` (${c.etichetta})` : ''), artist: sub, album: p ? p.titolo : 'Bounces',
+      artwork: [uc ? { src: uc, sizes: '512x512' } : { src: new URL('icona-512.png', location.href).href, sizes: '512x512', type: 'image/png' }] })
+    MS.playbackState = A.paused ? 'paused' : 'playing'
+  } catch {}
+  posizioneSessione()
+}
+// la barra della schermata di blocco: durata e punto in cui sei
+function posizioneSessione() {
+  const d = A.duration
+  if (navigator.mediaSession?.setPositionState && d && isFinite(d))
+    try { navigator.mediaSession.setPositionState({ duration: d, position: Math.min(A.currentTime, d), playbackRate: A.playbackRate || 1 }) } catch {}
+}
 
 // passando sopra un brano (o toccandolo) il suo audio inizia a caricarsi: al clic parte subito
 let attesaPrepara = 0
@@ -1647,7 +1684,9 @@ document.addEventListener('change', async e => {
       const vid = el.dataset.etichettaV ? +el.dataset.etichettaV : +el.closest('.ver-riga').dataset.v
       await api('PATCH', `/api/versioni/${vid}`, { etichetta: etichettaVersione(el.value) })
     } else if (el.dataset.statoV) {
-      el.dataset.s = el.value
+      const w = el.closest('.stato')
+      w.dataset.s = el.value
+      w.firstElementChild.textContent = el.value ? el.value.toUpperCase() : '—'
       await api('PATCH', `/api/versioni/${+el.dataset.statoV}`, { stato: el.value || null })
       el.blur()
     } else return

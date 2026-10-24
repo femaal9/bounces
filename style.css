@@ -451,10 +451,12 @@ body.ospite .tr .ver, body.ospite .tr .nasc2, body.ospite .tl-testa .ver, body.o
 .testa .meta .condiviso { color: var(--accento); }
 
 /* stato delle versioni (24/10): DEMO PROD REC PREMIX MIX MASTER, tendina colorata */
-.stato { appearance: none; -webkit-appearance: none; border: 0; border-radius: 10px; padding: 2px 8px 2px calc(8px + .06em); margin-left: 6px; text-align: center; text-align-last: center; font-size: 10px; font-weight: 800;
-  letter-spacing: .06em; background: #2a2a2a; color: var(--tenue); cursor: pointer; outline: none; font-style: normal; }
+.stato { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 54px; box-sizing: border-box; border-radius: 10px;
+  padding: 3px 8px 3px calc(8px + .06em); margin-left: 6px; font-size: 10px; line-height: 12px; font-weight: 800; letter-spacing: .06em;
+  background: #2a2a2a; color: var(--tenue); font-style: normal; flex: none; }
 .stato:hover { filter: brightness(1.25); }
-.stato option { background: #282828; color: #fff; }
+.stato-sel { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; border: 0; }
+.stato-sel option { background: #282828; color: #fff; }
 .stato[data-s=demo] { background: #3a3a3a; color: #e0e0e0; }
 .stato[data-s=prod] { background: #1d3b7a; color: #b9cdfb; }
 .stato[data-s=rec] { background: #7a1d24; color: #ffc4c8; }
@@ -624,17 +626,26 @@ body.ospite .tr .ver { visibility: visible; }
   .sc-titolo span { display: block; color: rgba(255,255,255,.72); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sc-titolo .ic { width: 44px; height: 44px; color: rgba(255,255,255,.85); }
   .sc-titolo .ic svg { width: 26px; height: 26px; }
-  #onda-sc { width: 100%; height: 56px; margin-top: 3vh; touch-action: none; flex: none; }
-  .sc-tempi { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,.72); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  /* barra sottile col pallino, come Spotify (25/10, al posto della waveform: quella resta nel pannello Versioni) */
+  #sc-barra { padding: 12px 0; margin-top: 2.5vh; touch-action: none; flex: none; cursor: pointer; }
+  .sc-binario { position: relative; height: 4px; border-radius: 2px; background: rgba(255,255,255,.3); }
+  .sc-pieno { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: #fff; }
+  .sc-pieno::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  #sc-barra.giu .sc-pieno { background: var(--verde); }
+  .sc-tempi { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,.7); font-variant-numeric: tabular-nums; margin-top: -4px; }
   .sc-tasti { display: flex; align-items: center; justify-content: space-between; margin: 2.5vh 0 3vh; }
   .sc-tasti .ic { width: 48px; height: 48px; color: var(--testo); position: relative; }
   .sc-tasti .ic svg { width: 24px; height: 24px; }
   .sc-tasti .ic.grande svg { width: 32px; height: 32px; }
   .sc-tasti .ic.on { color: var(--verde); }
   .sc-tasti .ic.on::after { content: ""; position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--verde); }
-  .sc-play { width: 72px; height: 72px; border-radius: 50%; background: var(--testo); color: #000; display: grid; place-items: center; flex: none; }
+  .sc-play { width: 64px; height: 64px; border-radius: 50%; background: var(--testo); color: #000; display: grid; place-items: center; flex: none; }
   .sc-play svg { width: 30px; height: 30px; }
-  .sc-dettagli { align-self: center; height: 40px; }
+  /* sotto i tasti un riquadro col colore della copertina, come quello del testo su Spotify */
+  .sc-dettagli { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; flex: none; text-align: left; padding: 16px; border-radius: 10px;
+    background: color-mix(in srgb, var(--c, #555) 60%, #000); }
+  .sc-dettagli b { font-size: 16px; font-weight: 700; }
+  .sc-dettagli span { font-size: 13px; color: rgba(255,255,255,.75); }
   body.schermo-aperto #player, body.schermo-aperto #schede { visibility: hidden; }
 
   /* tocco: niente sfondi "hover" che restano accesi */
@@ -678,4 +689,41 @@ body.ospite .tr .ver { visibility: visible; }
   #schede { display: grid; grid-template-columns: repeat(3, 1fr); align-items: start; justify-items: center; padding: 8px 0 env(safe-area-inset-bottom); }
   #schede a { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font-size: 11px; font-weight: 500; }
   #schede a span { display: grid; place-items: center; height: 24px; }
+}
+/* ===================== TELEFONO "identico a Spotify" (25/10, richiesta di Matteo) ===================== */
+@media (max-width: 760px) {
+  /* barra in alto: tondino dell'account a sinistra come su Spotify; nelle pagine interne c'è la freccia al suo posto */
+  #barra { grid-template-columns: auto minmax(0, 1fr); }
+  body.su-cerca #barra { grid-template-columns: auto auto minmax(0, 1fr); }
+  .barra-dx { order: -1; }
+  body:has(.indietro:not([hidden])) .barra-dx { display: none; }
+  body:has(.indietro:not([hidden])) #barra { grid-template-columns: minmax(0, 1fr); }
+
+  /* pagina del progetto: copertina grande, titolo a sinistra, play verde a destra */
+  .testa { padding: 24px 16px 14px; gap: 14px; }
+  .testa .cover, .testa .avatar { width: min(64vw, 260px); height: min(64vw, 260px); border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  .testa .tipo { display: none; }
+  .testa .info { width: 100%; }
+  .titolo-grande { font-size: 24px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; margin: 0 0 4px -6px; }
+  .testa .meta { font-size: 13px; color: var(--tenue); }
+  .azioni { padding: 4px 16px 14px; gap: 8px; }
+  .azioni > .pv { order: 9; margin-left: auto; width: 56px; height: 56px; }
+  .azioni .ic { width: 36px; height: 36px; }
+
+  /* righe dei brani come l'app: titolo bianco 16, sotto grigio 13 */
+  .tl .tr, .tl.multi .tr { height: 56px; }
+  .tr .tt b { font-size: 16px; font-weight: 400; }
+  .tr .tt small { font-size: 13px; }
+
+  /* mini-player: angoli e copertina come Spotify, barretta sottile in fondo */
+  #player { border-radius: 8px; }
+  .pl-sx .cover { width: 40px; height: 40px; border-radius: 4px; }
+  .pl-testi a { font-size: 13px; font-weight: 700; }
+  .pl-testi span { font-size: 13px; }
+  .pl-centro { left: 8px; right: 8px; }
+
+  /* libreria: copertine da 64 come nell'app */
+  .voce { padding: 6px 0; }
+  .voce .cover, .voce .avatar { width: 64px; height: 64px; }
+  .voce b { font-size: 16px; font-weight: 400; }
 }
