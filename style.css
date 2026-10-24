@@ -670,3 +670,9 @@ body.ospite .tr .ver { visibility: visible; }
   .menu.finestra .fila-c { justify-content: center; }
   @keyframes sale { from { opacity: .3; translate: 0 40%; } to { opacity: 1; translate: 0 0; } }
 }
+/* barra in basso (Home, Cerca, La tua libreria): tre colonne uguali, icona e scritta centrate (24/10) */
+@media (max-width: 760px) {
+  #schede { display: grid; grid-template-columns: repeat(3, 1fr); align-items: start; justify-items: center; padding: 8px 0 env(safe-area-inset-bottom); }
+  #schede a { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font-size: 11px; font-weight: 500; }
+  #schede a span { display: grid; place-items: center; height: 24px; }
+}
