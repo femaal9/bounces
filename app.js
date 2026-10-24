@@ -709,6 +709,14 @@ function suonaContesto(ctx, bid = null) {
   let i = bid ? S.coda.findIndex(x => x.bid === bid) : 0
   if (!bid && S.casuale) i = Math.floor(Math.random() * S.coda.length)
   vai(Math.max(0, i))
+  apriPlayer()
+}
+// premendo play il player si apre da solo (25/10, Matteo): a schermo intero sul telefono, pannello a destra sul PC
+function apriPlayer() {
+  const c = S.coda[S.i]
+  if (!c) return
+  if (telefono()) return apriSchermo()
+  if (!S.ospite && !(S.pann && S.pann.bid === c.bid)) apriBrano(c.bid, true)
 }
 
 // un brano da una lista: la coda diventa quella lista (come su Spotify)
@@ -725,6 +733,7 @@ function suonaBrano(bid, vid = null) {
   S.coda = braniContesto(ctx).filter(x => x.audio).map(x => (v && x.id === bid ? voce(x, v) : voce(x)))
   if (v && !S.coda.some(x => x.bid === bid)) S.coda.push(voce(b, v))
   vai(Math.max(0, S.coda.findIndex(x => x.bid === bid)))
+  apriPlayer()
 }
 
 async function vai(i) {
@@ -914,37 +923,29 @@ function disegnaOndaPannello() {
   if (!o) return
   const c = S.coda[S.i], qui = c && c.vid === o.vid
   const dur = (qui && A.duration) || o.durata || 0
-  disegnaOnda($('#onda-pn'), o.picchi, dur, qui && dur ? A.currentTime / dur : 0, o.commenti, 10)
+  disegnaBarra($('#onda-pn'), dur, qui && dur ? A.currentTime / dur : 0, o.commenti)
 }
-// waveform a barre: già ascoltato in verde (bianco in pausa), pallini dei commenti in alto se c'è spazio (alto > 0)
-function disegnaOnda(cv, picchi, dur, fatto, commenti = [], alto = 0) {
+// barra sottile col pallino, come Spotify (25/10, al posto della waveform): già ascoltato in bianco (verde mentre suona),
+// pallini verdi dei commenti sopra la barra
+function disegnaBarra(cv, dur, fatto, commenti = []) {
   if (!cv || !cv.clientWidth) return
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr) }
   const g = cv.getContext('2d')
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
   g.clearRect(0, 0, w, h)
-  const p = picchi && picchi.length ? picchi : null
-  const passo = 3, barre = Math.floor(w / passo), spazio = h - alto - 2
-  const verde = colore('--verde'), chiaro = '#ffffff', scuro = 'rgba(255,255,255,.28)'
-  for (let k = 0; k < barre; k++) {
-    let a = 0.06
-    if (p) {
-      const i0 = Math.floor(k * p.length / barre), i1 = Math.max(i0 + 1, Math.floor((k + 1) * p.length / barre))
-      for (let j = i0; j < i1 && j < p.length; j++) a = Math.max(a, p[j])
-    }
-    const bh = Math.max(2, a * spazio)
-    g.fillStyle = (k + 0.5) / barre <= fatto ? (A.paused ? chiaro : verde) : scuro
-    g.fillRect(k * passo, alto + (spazio - bh) / 2, 2, bh)
-  }
-  if (dur && alto) {
-    g.fillStyle = verde
-    for (const m of commenti || []) {
-      if (m.secondi == null) continue
-      g.beginPath()
-      g.arc(Math.min(w - 4, Math.max(4, m.secondi / dur * w)), 4, 3.5, 0, Math.PI * 2)
-      g.fill()
-    }
+  const verde = colore('--verde'), r = 6, y = h - r - 2, x0 = r, lung = w - 2 * r, x = x0 + lung * Math.min(1, Math.max(0, fatto))
+  const linea = (da, a, col) => { g.fillStyle = col; g.beginPath(); g.roundRect(da, y - 2, Math.max(0, a - da), 4, 2); g.fill() }
+  linea(x0, x0 + lung, 'rgba(255,255,255,.3)')
+  linea(x0, x, A.paused ? '#fff' : verde)
+  if (fatto > 0) { g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill() }
+  if (!dur) return
+  g.fillStyle = verde
+  for (const m of commenti || []) {
+    if (m.secondi == null) continue
+    g.beginPath()
+    g.arc(x0 + lung * Math.min(1, m.secondi / dur), 4, 3.5, 0, Math.PI * 2)
+    g.fill()
   }
 }
 
