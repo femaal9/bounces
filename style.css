@@ -692,12 +692,10 @@ body.ospite .tr .ver { visibility: visible; }
 }
 /* ===================== TELEFONO "identico a Spotify" (25/10, richiesta di Matteo) ===================== */
 @media (max-width: 760px) {
-  /* barra in alto: tondino dell'account a sinistra come su Spotify; nelle pagine interne c'è la freccia al suo posto */
-  #barra { grid-template-columns: auto minmax(0, 1fr); }
-  body.su-cerca #barra { grid-template-columns: auto auto minmax(0, 1fr); }
-  .barra-dx { order: -1; }
-  body:has(.indietro:not([hidden])) .barra-dx { display: none; }
-  body:has(.indietro:not([hidden])) #barra { grid-template-columns: minmax(0, 1fr); }
+  /* barra in alto: niente tondino dell'account (25/10, Matteo), solo BOUNCES o la freccia indietro */
+  .barra-dx { display: none !important; }
+  #barra { grid-template-columns: minmax(0, 1fr); }
+  body.su-cerca #barra { grid-template-columns: auto minmax(0, 1fr); }
 
   /* pagina del progetto: copertina grande, titolo a sinistra, play verde a destra */
   .testa { padding: 24px 16px 14px; gap: 14px; }
