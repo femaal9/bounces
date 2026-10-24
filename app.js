@@ -368,6 +368,49 @@ function rinominaInRiga(bid) {
   campo.select()
 }
 
+// autori di un brano dal menu ⋯ (25/10, Matteo): stanno tra parentesi in fondo al titolo, come sempre,
+// così finiscono da soli nella sezione Autori. Si scrivono separati da virgola; sotto, quelli che ci sono già
+function autoriBrano(bid) {
+  const b = S.perBrano.get(bid), x = S.info.get(bid)
+  if (!b || !x) return
+  // il titolo senza le parentesi degli autori (un tag tipo "(Remix)" resta)
+  const m = b.titolo.match(/\s*\(([^()]*)\)\s*$/)
+  const base = m && !ETICHETTA.test(m[1].trim()) ? b.titolo.slice(0, m.index).trim() : b.titolo.trim()
+  const fondo = document.createElement('div')
+  fondo.className = 'modale-fondo'
+  fondo.innerHTML = `<div class="modale">
+    <h3>Autori</h3>
+    <p>Di <b>${esc(x.nome)}</b>. Separali con una virgola.</p>
+    <div class="nuovo-prog"><input placeholder="Es. Matteo Milita, Trilussa" spellcheck="false" value="${esc(x.autori.join(', '))}"></div>
+    ${S.autori.length ? `<div class="sottotitolo">Aggiungi uno che c'è già</div>
+      <div class="chips autori-noti">${S.autori.map(a => `<button data-autore="${esc(a.nome)}">${esc(a.nome)}</button>`).join('')}</div>` : ''}
+    <div class="fondo-modale"><button class="btn" data-annulla>Annulla</button><button class="btn pieno" data-ok>Salva</button></div></div>`
+  document.body.append(fondo)
+  const campo = $('input', fondo)
+  const lista = () => campo.value.split(',').map(a => a.trim()).filter(Boolean)
+  const fine = () => fondo.remove()
+  const salva = async () => {
+    const visti = new Set(), autori = lista().filter(a => !visti.has(norm(a)) && visti.add(norm(a)))
+    const nuovo = autori.length ? `${base} (${autori.join(', ')})` : base
+    fine()
+    if (nuovo === b.titolo) return
+    try { await api('PATCH', `/api/brani/${bid}`, { titolo: nuovo }); avviso(autori.length ? 'Autori salvati' : 'Autori tolti') } catch (e) { sbaglio(e) }
+    ricarica()
+  }
+  fondo.addEventListener('click', e => {
+    const a = e.target.closest('[data-autore]')
+    if (a) {
+      const l = lista()
+      if (!l.some(y => norm(y) === norm(a.dataset.autore))) campo.value = [...l, a.dataset.autore].join(', ')
+      return campo.focus()
+    }
+    if (e.target.closest('[data-ok]')) return salva()
+    if (e.target.closest('[data-annulla]') || e.target === fondo) fine()
+  })
+  campo.addEventListener('keydown', e => { if (e.key === 'Enter') salva(); if (e.key === 'Escape') fine() })
+  setTimeout(() => { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length) }, 50)
+}
+
 // numero di versione scritto a mano: "4", "v4", "V 4" → "V4"; il resto resta com'è
 const etichettaVersione = t => { const m = t.trim().match(/^v?\s*(\d{1,3})$/i); return m ? 'V' + +m[1] : t.trim() }
 
@@ -1160,6 +1203,7 @@ function menuBrano(x, y, bid) {
   menu(x, y, [
     ...(b.audio ? [{ testo: 'Riproduci', az: 'm-suona' }] : [{ testo: 'Carica l’audio', az: 'm-collega' }]),
     { testo: 'Rinomina', az: 'm-rinomina' },
+    { testo: 'Autori...', az: 'm-autori' },
     { testo: 'Versioni, note e commenti', az: 'm-apri' },
     { testo: b.preferito ? 'Togli dai Preferiti' : 'Aggiungi ai Preferiti', az: 'm-cuore' },
     { testo: 'Nuova versione...', az: 'm-versione' },
@@ -1301,8 +1345,82 @@ async function caricaVersione(bid, file, collegaA = null) {
 }
 
 async function caricaCover(pid, file) {
-  if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) return avviso('Immagine jpg, png o webp', true)
-  try { await copertinaDropbox(pid, file); await ricarica() } catch (e) { sbaglio(e) }
+  if (!file.type.startsWith('image/')) return avviso('Scegli un\u2019immagine (jpg, png, webp)', true)
+  let tagliata
+  try { tagliata = await ritagliaCover(file) } catch { return avviso('Non riesco ad aprire questa immagine', true) }
+  if (!tagliata) return
+  try { await copertinaDropbox(pid, new File([tagliata], 'cover.jpg', { type: 'image/jpeg' })); await ricarica() } catch (e) { sbaglio(e) }
+}
+
+// prima di caricare la copertina (25/10, Matteo): la foto si ingrandisce e si sposta dentro il quadrato.
+// Trascina per spostare, rotella / due dita / cursore per lo zoom. Esce un jpg quadrato da 1200 px (null = annulla)
+function ritagliaCover(file) {
+  return new Promise((ok, ko) => {
+    const url = URL.createObjectURL(file), img = new Image()
+    img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('immagine')) }
+    img.onload = () => {
+      const fondo = document.createElement('div')
+      fondo.className = 'modale-fondo'
+      fondo.innerHTML = `<div class="modale ritaglio">
+        <h3>Sistema la copertina</h3>
+        <p>Trascina per spostarla, usa il cursore (o due dita, o la rotella) per ingrandirla.</p>
+        <div class="rt-quadro"><img src="${url}" alt="" draggable="false"></div>
+        <input class="rt-zoom" type="range" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+        <div class="fondo-modale"><button class="btn" data-annulla>Annulla</button><button class="btn pieno" data-ok>Usa questa</button></div></div>`
+      document.body.append(fondo)
+      const quadro = $('.rt-quadro', fondo), foto = $('img', fondo), cursore = $('.rt-zoom', fondo)
+      const W = img.naturalWidth, H = img.naturalHeight
+      let z = 1, cx = W / 2, cy = H / 2  // zoom (1 = la foto riempie il quadrato) e punto della foto al centro del quadrato
+      const lato = () => quadro.clientWidth
+      const base = () => lato() / Math.min(W, H)  // px dello schermo per px della foto, a zoom 1
+      const disegna = () => {
+        const k = base() * z, mezzo = lato() / 2 / k
+        cx = Math.min(W - mezzo, Math.max(mezzo, cx))
+        cy = Math.min(H - mezzo, Math.max(mezzo, cy))
+        foto.style.width = W * k + 'px'
+        foto.style.transform = `translate(${lato() / 2 - cx * k}px, ${lato() / 2 - cy * k}px)`
+        cursore.value = z
+      }
+      const zoom = nuovo => { z = Math.min(4, Math.max(1, nuovo)); disegna() }
+      // dito o mouse: uno sposta, due fanno lo zoom
+      const tocchi = new Map()
+      let inizio = null
+      quadro.addEventListener('pointerdown', e => { quadro.setPointerCapture(e.pointerId); tocchi.set(e.pointerId, [e.clientX, e.clientY]); inizio = null })
+      quadro.addEventListener('pointermove', e => {
+        if (!tocchi.has(e.pointerId)) return
+        const prima = tocchi.get(e.pointerId)
+        tocchi.set(e.pointerId, [e.clientX, e.clientY])
+        if (tocchi.size === 1) {
+          const k = base() * z
+          cx -= (e.clientX - prima[0]) / k
+          cy -= (e.clientY - prima[1]) / k
+          return disegna()
+        }
+        const [a, b] = [...tocchi.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1])
+        if (!inizio) inizio = { d, z }
+        else zoom(inizio.z * d / inizio.d)
+      })
+      const su = e => { tocchi.delete(e.pointerId); inizio = null }
+      quadro.addEventListener('pointerup', su)
+      quadro.addEventListener('pointercancel', su)
+      quadro.addEventListener('wheel', e => { e.preventDefault(); zoom(z * Math.exp(-e.deltaY / 400)) }, { passive: false })
+      cursore.addEventListener('input', () => zoom(+cursore.value))
+      const fine = v => { fondo.remove(); URL.revokeObjectURL(url); ok(v) }
+      fondo.addEventListener('click', e => {
+        if (e.target.closest('[data-annulla]') || e.target === fondo) return fine(null)
+        if (!e.target.closest('[data-ok]')) return
+        const L = 1200, k = base() * z, taglio = lato() / k
+        const cv = document.createElement('canvas')
+        cv.width = cv.height = L
+        const g = cv.getContext('2d')
+        g.imageSmoothingQuality = 'high'
+        g.drawImage(img, cx - taglio / 2, cy - taglio / 2, taglio, taglio, 0, 0, L, L)
+        cv.toBlob(b => fine(b), 'image/jpeg', 0.9)
+      })
+      requestAnimationFrame(disegna)
+    }
+    img.src = url
+  })
 }
 
 // scaricare l'originale col suo nome ("TITOLO - V2.wav")
@@ -1635,6 +1753,7 @@ document.addEventListener('click', async e => {
       case 'm-suona': return suonaBrano(mb.id)
       case 'm-apri': return apriBrano(mb.id, true)
       case 'm-rinomina': return rinominaInRiga(mb.id)
+      case 'm-autori': return autoriBrano(mb.id)
       case 'rinomina': return rinominaInRiga(bRiga.id)
       case 'm-cuore': return cuore(mb.id)
       case 'm-versione': return scegliAudio(false, f => caricaVersione(mb.id, f[0]))

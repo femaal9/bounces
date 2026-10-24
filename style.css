@@ -725,3 +725,12 @@ body.ospite .tr .ver { visibility: visible; }
   .voce .cover, .voce .avatar { width: 64px; height: 64px; }
   .voce b { font-size: 16px; font-weight: 400; }
 }
+
+/* copertina: ritaglio prima di caricarla (25/10) */
+.modale.ritaglio { width: min(440px, 100%); }
+.rt-quadro { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: 6px; background: #000; cursor: grab; touch-action: none; margin: 6px 0 14px; }
+.rt-quadro:active { cursor: grabbing; }
+.rt-quadro img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.rt-zoom { width: 100%; accent-color: var(--verde); }
+.ritaglio .fondo-modale { gap: 8px; }
+.autori-noti { max-height: 150px; overflow-y: auto; margin-bottom: 4px; }
