@@ -180,7 +180,8 @@ textarea.campo:hover { background: #2a2a2a; }
 .testa .avatar { border-radius: 50%; font-size: 84px; }
 .testa .cover.cambiabile { cursor: pointer; }
 .testa .cover .cambia { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); opacity: 0; transition: .15s; font-weight: 700; }
-.testa .cover.cambiabile:hover .cambia { opacity: 1; }
+/* "Scegli foto" solo col mouse: su iPhone il tocco che apre il progetto resta come :hover sulla copertina (25/10, Matteo) */
+@media (hover: hover) { .testa .cover.cambiabile:hover .cambia { opacity: 1; } }
 .testa .info { min-width: 0; flex: 1; }
 .testa .tipo { font-size: 13px; font-weight: 600; }
 .titolo-grande { font-size: clamp(30px, 7.5cqw, 88px); font-weight: 900; letter-spacing: -0.04em; line-height: 1; margin: 8px 0 14px -6px; padding: 4px 6px; }
@@ -743,5 +744,5 @@ body.ospite .tr .ver { visibility: visible; }
 .avatar-cambia { flex: none; cursor: pointer; }
 .testa .avatar.cambiabile { position: relative; overflow: hidden; }
 .testa .avatar .cambia { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); opacity: 0; transition: .15s; font-size: 15px; font-weight: 700; text-transform: none; }
-.avatar-cambia:hover .cambia { opacity: 1; }
+@media (hover: hover) { .avatar-cambia:hover .cambia { opacity: 1; } }
 .link-piccolo { background: none; border: 0; padding: 0 0 0 10px; color: rgba(255,255,255,.7); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
