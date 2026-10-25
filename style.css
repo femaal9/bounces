@@ -734,3 +734,10 @@ body.ospite .tr .ver { visibility: visible; }
 .rt-zoom { width: 100%; accent-color: var(--verde); }
 .ritaglio .fondo-modale { gap: 8px; }
 .autori-noti { max-height: 150px; overflow-y: auto; margin-bottom: 4px; }
+/* foto degli autori (25/10) */
+.avatar.foto { background-size: cover; background-position: center; }
+.avatar-cambia { flex: none; cursor: pointer; }
+.testa .avatar.cambiabile { position: relative; overflow: hidden; }
+.testa .avatar .cambia { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); opacity: 0; transition: .15s; font-size: 15px; font-weight: 700; text-transform: none; }
+.avatar-cambia:hover .cambia { opacity: 1; }
+.link-piccolo { background: none; border: 0; padding: 0 0 0 10px; color: rgba(255,255,255,.7); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }

@@ -340,7 +340,7 @@ function vistaLibreria() {
   }).sort((a, b) => b.modificato - a.modificato)
   const cartelle = l.cartelle.map(c => ({ ...c, n: l.progetti.filter(p => p.cartella_id === c.id).length }))
     .sort((a, b) => a.titolo.localeCompare(b.titolo, 'it', { sensitivity: 'base' }))
-  return { progetti, cartelle, brani }
+  return { progetti, cartelle, brani, foto_autori: { ...(l.foto_autori || {}) } }
 }
 
 function vistaProgetto(pid) {
@@ -655,6 +655,19 @@ async function copertinaDropbox(pid, file) {
   if (p.cover && p.cover.toLowerCase() !== m.path_lower) await Dbx.alCestino(p.cover)
   cacheLink.delete(m.path_display)
   Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x) { x.cover = m.path_display; x.modificato = adesso() } })
+}
+
+// foto degli autori (25/10, Matteo): una per autore in /.bounces/autori, chiave = nome normalizzato
+async function fotoAutoreDropbox(chiave, file) {
+  const m = await Dbx.carica(`/.bounces/autori/${chiave.replace(/[\\/:*?"<>|]/g, '') || 'autore'}.jpg`, file, { modo: 'overwrite', autorename: false })
+  cacheLink.delete(m.path_display)
+  Archivio.cambia(l => { (l.foto_autori ||= {})[chiave] = m.path_display })
+}
+async function togliFotoAutore(chiave) {
+  const p = (L().foto_autori || {})[chiave]
+  if (!p) return
+  await Dbx.alCestino(p)
+  Archivio.cambia(l => { if (l.foto_autori) delete l.foto_autori[chiave] })
 }
 
 // --- link d'ascolto sempre aggiornato (24/10) ---

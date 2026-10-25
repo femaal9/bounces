@@ -103,17 +103,24 @@ const coverStile = p => { const u = urlCover(p); return u ? `style="background-i
 const coverClasse = p => p && p.cover ? 'cover' : `cover sf-${(p && p.sfondo) || 1}`
 const coverHtml = (p, extra = '') => `<div class="${coverClasse(p)} ${extra}" ${coverStile(p)}></div>`
 const iniziali = nome => nome.split(/\s+/).map(x => x[0]).join('').slice(0, 2)
-const avatarHtml = a => `<div class="avatar" style="background:${coloreTesto(a.chiave)}">${esc(iniziali(a.nome))}</div>`
+// con la foto dell'autore se c'è (25/10), altrimenti le iniziali sul suo colore
+const urlFotoAutore = a => { const p = S.lib && S.lib.foto_autori && S.lib.foto_autori[a.chiave]; return p ? Dbx.linkSubito(p, ridisegnaPresto) : null }
+const avatarHtml = (a, extra = '') => {
+  const u = urlFotoAutore(a)
+  return `<div class="avatar ${u ? 'foto' : ''} ${extra}" style="background-color:${coloreTesto(a.chiave)}${u ? `;background-image:url('${u}')` : ''}">${u ? '' : esc(iniziali(a.nome))}${extra ? '<span class="cambia">Scegli foto</span>' : ''}</div>`
+}
 
 // --- titoli: nome, interprete, etichetta (DEMO V2...) e autori ---
 const ETICHETTA = /^(demo|mix|master|v\s?\d|rough|cut|bozza|provino|strum|instr|edit|rmx|remix|live|acustic|acoustic|rev|alt|radio|ref)\b/i
+// autori sempre in ordine alfabetico, sotto il titolo e nel titolo salvato (25/10, Matteo)
+const perNome = (a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' })
 function scomponi(titolo) {
   let t = String(titolo || '').trim(), tag = '', autori = [], interprete = ''
   const m = t.match(/\s*\(([^()]*)\)\s*$/)
   if (m) {
     const dentro = m[1].trim()
     if (ETICHETTA.test(dentro)) tag = dentro
-    else autori = dentro.split(/\s*,\s*|\s+-\s+|\s*&\s*/).map(a => a.replace(/^([A-Za-z]\.\s*)+/, '').trim()).filter(Boolean)
+    else autori = dentro.split(/\s*,\s*|\s+-\s+|\s*&\s*/).map(a => a.replace(/^([A-Za-z]\.\s*)+/, '').trim()).filter(Boolean).sort(perNome)
     t = t.slice(0, m.index).trim()
   }
   const d = t.match(/^(.*?)\s+-\s*(.*)$/)
@@ -390,7 +397,7 @@ function autoriBrano(bid) {
   const lista = () => campo.value.split(',').map(a => a.trim()).filter(Boolean)
   const fine = () => fondo.remove()
   const salva = async () => {
-    const visti = new Set(), autori = lista().filter(a => !visti.has(norm(a)) && visti.add(norm(a)))
+    const visti = new Set(), autori = lista().filter(a => !visti.has(norm(a)) && visti.add(norm(a))).sort(perNome)
     const nuovo = autori.length ? `${base} (${autori.join(', ')})` : base
     fine()
     if (nuovo === b.titolo) return
@@ -583,9 +590,10 @@ function pagAutore(chiave) {
   const con = new Map()
   for (const b of a.brani) for (const x of S.info.get(b.id).autori) { const k = norm(x); if (k !== a.chiave) con.set(k, (con.get(k) || 0) + 1) }
   const spesso = [...con].sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k]) => S.perAutore.get(k)).filter(Boolean)
-  return `<section class="testa" style="--c:${col}">${avatarHtml(a)}
+  const puo = !S.ospite, haFoto = !!urlFotoAutore(a)
+  return `<section class="testa" style="--c:${col}">${puo ? `<div class="avatar-cambia" data-az="foto-autore" title="${haFoto ? 'Cambia foto' : 'Metti una foto'}">${avatarHtml(a, 'cambiabile')}</div>` : avatarHtml(a)}
       <div class="info"><span class="tipo">Autore</span><h1 class="titolo-grande">${esc(a.nome)}</h1>
-        <div class="meta"><span>${nBrani(a.brani.length)} in ${a.progetti === 1 ? '1 progetto' : a.progetti + ' progetti'}</span></div></div>
+        <div class="meta"><span>${nBrani(a.brani.length)} in ${a.progetti === 1 ? '1 progetto' : a.progetti + ' progetti'}</span>${puo && haFoto ? '<button class="link-piccolo" data-az="togli-foto-autore">Togli foto</button>' : ''}</div></div>
     </section>
     <div class="dopo-testa" style="--c:${col}">
       <div class="azioni">${bottonePlay(ctx, a.brani)}</div>
@@ -1354,7 +1362,7 @@ async function caricaCover(pid, file) {
 
 // prima di caricare la copertina (25/10, Matteo): la foto si ingrandisce e si sposta dentro il quadrato.
 // Trascina per spostare, rotella / due dita / cursore per lo zoom. Esce un jpg quadrato da 1200 px (null = annulla)
-function ritagliaCover(file) {
+function ritagliaCover(file, titolo = 'Sistema la copertina') {
   return new Promise((ok, ko) => {
     const url = URL.createObjectURL(file), img = new Image()
     img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('immagine')) }
@@ -1362,7 +1370,7 @@ function ritagliaCover(file) {
       const fondo = document.createElement('div')
       fondo.className = 'modale-fondo'
       fondo.innerHTML = `<div class="modale ritaglio">
-        <h3>Sistema la copertina</h3>
+        <h3>${titolo}</h3>
         <p>Trascina per spostarla, usa il cursore (o due dita, o la rotella) per ingrandirla.</p>
         <div class="rt-quadro"><img src="${url}" alt="" draggable="false"></div>
         <input class="rt-zoom" type="range" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
@@ -1539,6 +1547,16 @@ function scegliAudio(multipli, cb) {
   inp.click()
 }
 $('#scegli-audio').addEventListener('change', e => { const f = [...e.target.files]; if (f.length && dopoScelta) dopoScelta(f) })
+// foto dell'autore (25/10): stesso ritaglio delle copertine, poi tonda
+$('#scegli-foto-autore').addEventListener('change', async e => {
+  const f = e.target.files[0], { vista, arg } = rotta()
+  if (!f || vista !== 'autore') return
+  if (!f.type.startsWith('image/')) return avviso('Scegli un\u2019immagine (jpg, png, webp)', true)
+  let tagliata
+  try { tagliata = await ritagliaCover(f, 'Sistema la foto') } catch { return avviso('Non riesco ad aprire questa immagine', true) }
+  if (!tagliata) return
+  try { await fotoAutoreDropbox(arg, new File([tagliata], 'autore.jpg', { type: 'image/jpeg' })); avviso('Foto salvata'); await ricarica() } catch (e) { sbaglio(e) }
+})
 $('#scegli-cover').addEventListener('change', e => { const f = e.target.files[0], { vista, arg } = rotta(); if (f && vista === 'progetto') caricaCover(+arg, f) })
 
 // --- trascinamento: file dal Finder (progetti, brani, versioni, cover) e righe per riordinare ---
@@ -1710,6 +1728,8 @@ document.addEventListener('click', async e => {
       case 'colore': await api('PATCH', `/api/progetti/${pid}`, { sfondo: (S.perId.get(pid).sfondo % 10) + 1 }); return ricarica()
       case 'cover': $('#scegli-cover').value = ''; return $('#scegli-cover').click()
       case 'togli-cover': await api('DELETE', `/api/progetti/${pid}/cover`); return ricarica()
+      case 'foto-autore': $('#scegli-foto-autore').value = ''; return $('#scegli-foto-autore').click()
+      case 'togli-foto-autore': try { await togliFotoAutore(rotta().arg); avviso('Foto tolta') } catch (e) { sbaglio(e) } return ricarica()
       case 'sposta': await api('PATCH', `/api/progetti/${pid}`, { cartella_id: arg ? +arg : null }); avviso(arg ? 'Spostato' : 'Tolto dalla cartella'); return ricarica()
       case 'sposta-nuova': return nuovaCartella(pid)
       case 'elimina-progetto': {
