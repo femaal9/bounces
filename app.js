@@ -942,7 +942,7 @@ $('#schermo').addEventListener('click', e => {
   const az = t.dataset.sc
   if (az === 'chiudi') { S.schermo = false; return disegnaSchermo() }
   if (az === 'play') return A.paused ? A.play() : A.pause()
-  if (az === 'prec') return $('#pl-prec').click()
+  if (az === 'prec') return indietro()
   if (az === 'succ') return prossimo()
   if (az === 'casuale') return $('#pl-casuale').click()
   if (az === 'loop') return $('#pl-loop').click()
@@ -1019,7 +1019,7 @@ function giro() {
   if (!A.paused) requestAnimationFrame(giro)
 }
 Object.assign(EVENTI, {
-  play: () => { statoSessione(); ridisegna(); requestAnimationFrame(giro) },
+  play: () => { comandi(); statoSessione(); ridisegna(); requestAnimationFrame(giro) },
   pause: () => { statoSessione(); ridisegna() },
   timeupdate: () => { if (A.paused) tempi() },
   loadedmetadata: () => { tempi(); disegnaPunti(); posizioneSessione() },
@@ -1048,18 +1048,20 @@ Object.assign(EVENTI, {
 for (const [nome, f] of Object.entries(EVENTI)) A.addEventListener(nome, f)
 
 // schermata di blocco e Centro di controllo (25/10, Matteo): titolo, copertina e tasti brano precedente/successivo.
-// Senza questi iOS mostra solo "indietro/avanti di 10 secondi"
-if (navigator.mediaSession) {
+// iOS di suo mette "-15/+15 secondi": per toglierli non basta non dare quei comandi, bisogna darli e poi toglierli
+// (Safari li spegne solo se c'erano). E si ridanno a ogni play: quando l'audio parte iOS rilegge i comandi
+function comandi() {
   const MS = navigator.mediaSession
+  if (!MS) return
   const az = (nome, f) => { try { MS.setActionHandler(nome, f) } catch {} }
   az('play', () => A.play())
   az('pause', () => A.pause())
-  az('previoustrack', () => $('#pl-prec').click())
+  az('previoustrack', indietro)
   az('nexttrack', () => prossimo())
   az('seekto', d => salta(d.seekTime))
-  az('seekbackward', null)  // niente ±10 s: al loro posto iOS mette i tasti dei brani
-  az('seekforward', null)
+  for (const nome of ['seekbackward', 'seekforward']) { az(nome, () => {}); az(nome, null) }
 }
+comandi()
 // i dati del brano si danno solo quando cambia: riscriverli a ogni ridisegno fa ripartire la scheda su iOS
 let chiaveSessione = ''
 function sessione(c, x, sub, p, uc) {
@@ -1149,7 +1151,9 @@ slider($('#barra-volume'), volume)
 })()
 
 $('#pl-play').addEventListener('click', () => { if (S.coda[S.i]) A.paused ? A.play() : A.pause() })
-$('#pl-prec').addEventListener('click', () => A.currentTime > 3 || S.i === 0 ? salta(0) : vai(S.i - 1))
+// indietro va sempre al brano prima (25/10, Matteo: col "ricomincia dopo 3 s" di Spotify sembrava rotto); dal primo ricomincia
+function indietro() { S.i > 0 ? vai(S.i - 1) : salta(0) }
+$('#pl-prec').addEventListener('click', indietro)
 $('#pl-succ').addEventListener('click', prossimo)
 $('#pl-loop').addEventListener('click', () => { S.loop = !S.loop; disegnaPlayer() })
 $('#pl-casuale').addEventListener('click', () => {

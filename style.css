@@ -390,7 +390,7 @@ body.trascina-file .zona-file, body.trascina-file .vuoto { border-color: var(--v
 }
 @media (max-width: 760px) {
   :root { --player: 64px; }
-  body, body.con-pannello { grid-template-columns: minmax(0, 1fr); grid-template-rows: 56px minmax(0, 1fr) var(--player) 56px;
+  body, body.con-pannello { grid-template-columns: minmax(0, 1fr); grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) var(--player) 56px;
     grid-template-areas: "barra" "main" "player" "schede"; padding: 0; column-gap: 0; }
   body.con-pannello { grid-template-areas: "barra" "pann" "player" "schede"; }
   #lato { display: none; }
@@ -515,12 +515,14 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 
 /* --- telefono, sistemato il 24/10 (Matteo: "la versione per telefono è tutta sfanculata") --- */
 @media (max-width: 760px) {
-  body, body.con-pannello { grid-template-rows: 56px minmax(0, 1fr) var(--player) calc(56px + env(safe-area-inset-bottom)); }
+  body, body.con-pannello { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) var(--player) calc(56px + env(safe-area-inset-bottom)); }
   /* niente mini-player vuoto quando non suona niente */
-  body:has(#player.vuoto-pl) { grid-template-rows: 56px minmax(0, 1fr) 0 calc(56px + env(safe-area-inset-bottom)); }
+  body:has(#player.vuoto-pl) { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) 0 calc(56px + env(safe-area-inset-bottom)); }
   #player.vuoto-pl { display: none; }
   #schede { padding-bottom: env(safe-area-inset-bottom); }
   /* barra in alto: logo, ricerca, account sulla stessa riga */
+  /* la barra parte sotto ora e batteria: se no in Safari la scritta finisce sotto la barra di stato, sfocata (25/10, Matteo) */
+  #barra { padding-top: env(safe-area-inset-top) !important; }
   #barra { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
   #barra .logo { font-size: 17px; }
   .barra-dx { display: flex; }
@@ -559,8 +561,8 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 /* chi ascolta da un link: vede lo stato dei brani (DEMO, MIX, MASTER...) */
 body.ospite .tr .ver { visibility: visible; }
 @media (max-width: 760px) {
-  body.ospite { grid-template-rows: 56px minmax(0, 1fr) calc(var(--player) + env(safe-area-inset-bottom)); grid-template-areas: "barra" "main" "player"; }
-  body.ospite:has(#player.vuoto-pl) { grid-template-rows: 56px minmax(0, 1fr) 0; }
+  body.ospite { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) calc(var(--player) + env(safe-area-inset-bottom)); grid-template-areas: "barra" "main" "player"; }
+  body.ospite:has(#player.vuoto-pl) { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) 0; }
   body.ospite #player { margin-bottom: env(safe-area-inset-bottom); }
 }
 @media (max-width: 760px) { body.ospite .tl .tr { grid-template-columns: minmax(0, 1fr) auto; } }
@@ -668,7 +670,7 @@ body.ospite .tr .ver { visibility: visible; }
   .nuovo-commento input[name=testo] { font-size: 16px; }
 }
 @media (max-width: 760px) {
-  body.fuori { grid-template-rows: 56px minmax(0, 1fr); grid-template-areas: "barra" "main"; }
+  body.fuori { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr); grid-template-areas: "barra" "main"; }
   .benvenuto { padding: 10vh 24px 40px; }
   .logo-grande { font-size: 46px; }
   .benvenuto h1 { font-size: 24px; }
