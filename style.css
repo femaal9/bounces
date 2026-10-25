@@ -199,7 +199,7 @@ h1.titolo-grande { margin-left: 0; padding: 4px 0; overflow: hidden; text-overfl
 .tl { padding: 0 24px; container-type: inline-size; }
 .pagina .tl { padding: 0; }
 .tr, .tl-testa { display: grid; grid-template-columns: 16px minmax(0, 4fr) 128px 48px 96px 104px 28px 76px 32px; gap: 16px; align-items: center; padding: 0 16px; }
-.tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 2fr) 92px 48px 96px 104px 28px 76px 32px; }
+.tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 1.4fr) 128px 48px 96px 104px 28px 76px 32px; } /* Versione larga come nei progetti (25/10: "V1 PREMIX" era tagliato) */
 .tl-testa { height: 36px; color: var(--tenue); font-size: 13px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 12px; }
 .tl-testa svg { width: 15px; height: 15px; margin-left: auto; }
 .tl-testa > span:first-child { text-align: right; }
@@ -240,7 +240,7 @@ h1.titolo-grande { margin-left: 0; padding: 4px 0; overflow: hidden; text-overfl
 .tr.linea-sotto::after { bottom: -1px; }
 @container (max-width: 1000px) {
   .tr, .tl-testa { grid-template-columns: 16px minmax(0, 4fr) 118px 44px 88px 28px 64px 32px; }
-  .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 2fr) 80px 44px 88px 28px 64px 32px; }
+  .tl.multi .tr, .tl.multi .tl-testa { grid-template-columns: 16px minmax(0, 4fr) minmax(0, 1.4fr) 118px 44px 88px 28px 64px 32px; }
   .nasc2 { display: none; }
 }
 @container (max-width: 760px) {
