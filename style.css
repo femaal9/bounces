@@ -521,8 +521,9 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
   #player.vuoto-pl { display: none; }
   #schede { padding-bottom: env(safe-area-inset-bottom); }
   /* barra in alto: logo, ricerca, account sulla stessa riga */
-  /* la barra parte sotto ora e batteria: se no in Safari la scritta finisce sotto la barra di stato, sfocata (25/10, Matteo) */
-  #barra { padding-top: env(safe-area-inset-top) !important; }
+  /* BOUNCES sfocato (25/10, Matteo): iOS sfoca il primo elemento attaccato al bordo in alto, su tutta la sua altezza.
+     La barra non tocca il bordo: lo spazio di ora e batteria è un margine (sfondo della pagina), non un pezzo della barra */
+  #barra { margin-top: env(safe-area-inset-top); }
   #barra { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
   #barra .logo { font-size: 17px; }
   .barra-dx { display: flex; }
