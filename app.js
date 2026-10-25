@@ -711,9 +711,19 @@ let A = new Audio()
 A.preload = 'auto'
 const pronti = new Map()  // vid → <audio> già in caricamento
 const MAX_PRONTI = 3
+// su iPhone un solo <audio> per sempre: se si cambia elemento, o ce ne sono altri carichi, la schermata di blocco
+// perde il brano (non lo vede in play e mostra solo ±10 s). Lì si tiene pronto solo il link del prossimo
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+// iOS fa suonare un <audio> senza tocco solo se è già stato "acceso" da un tocco: lo si fa al primo, così il play
+// funziona anche quando il link arriva dopo un attimo, e a schermo bloccato col brano successivo
+if (IOS) document.addEventListener('touchend', function sblocca() {
+  document.removeEventListener('touchend', sblocca, true)
+  if (!A.getAttribute('src')) A.load()
+}, true)
 
 function prepara(vid) {
   if (!vid || pronti.has(vid) || S.coda[S.i]?.vid === vid) return
+  if (IOS) { if (!S.ospite && Archivio.percorso(vid)) sorgente(vid).catch(() => {}); return }
   const crea = url => {
     if (!url || pronti.has(vid)) return
     const el = new Audio()
@@ -793,12 +803,14 @@ async function vai(i) {
   const c = S.coda[i]
   S.dett = null
   // a schermo bloccato si resta sullo stesso <audio>: iOS non fa partire quello nuovo e perde i comandi
-  const giaPronto = document.hidden ? null : pronti.get(c.vid), salto = S.saltaDopo
+  const giaPronto = document.hidden || IOS ? null : pronti.get(c.vid), salto = S.saltaDopo
   S.saltaDopo = null
   const parti = () => {
     A.play().catch(() => {})
     if (salto != null) quandoPronto(() => salta(salto))
-    if (!S.casuale && S.coda[i + 1]) prepara(S.coda[i + 1].vid)  // il prossimo si carica mentre questo suona
+    S.dopo = S.casuale && S.coda.length > 1 ? aCaso() : null
+    const dopo = S.coda[S.dopo ?? i + 1]
+    if (dopo) prepara(dopo.vid)  // il prossimo si carica mentre questo suona
   }
   if (giaPronto) {
     pronti.delete(c.vid)
@@ -836,13 +848,15 @@ async function sorgente(vid) {
   if (!path) throw new Error('Questo brano non ha ancora l’audio')
   return Dbx.link(path)
 }
+// in casuale il prossimo si sceglie appena parte un brano, così ha già il link pronto quando serve
+function aCaso() {
+  let j
+  do j = Math.floor(Math.random() * S.coda.length); while (j === S.i)
+  return j
+}
 function prossimo() {
   if (!S.coda.length) return
-  if (S.casuale && S.coda.length > 1) {
-    let j
-    do j = Math.floor(Math.random() * S.coda.length); while (j === S.i)
-    return vai(j)
-  }
+  if (S.casuale && S.coda.length > 1) return vai(S.dopo != null && S.dopo !== S.i && S.dopo < S.coda.length ? S.dopo : aCaso())
   if (S.i < S.coda.length - 1) vai(S.i + 1)
 }
 
@@ -1005,17 +1019,31 @@ function giro() {
   if (!A.paused) requestAnimationFrame(giro)
 }
 Object.assign(EVENTI, {
-  play: () => { ridisegna(); requestAnimationFrame(giro) },
-  pause: () => ridisegna(),
+  play: () => { statoSessione(); ridisegna(); requestAnimationFrame(giro) },
+  pause: () => { statoSessione(); ridisegna() },
   timeupdate: () => { if (A.paused) tempi() },
   loadedmetadata: () => { tempi(); disegnaPunti(); posizioneSessione() },
   seeked: () => posizioneSessione(),
   ended: () => {
+    statoSessione()
     if (S.loop) { A.currentTime = 0; A.play(); return }
     if (S.casuale || S.i < S.coda.length - 1) prossimo()
     else ridisegna()
   },
-  error: () => { if (S.coda[S.i] && A.getAttribute('src')) avviso('Non riesco a riprodurre questo file', true) },
+  error: () => {
+    const c = S.coda[S.i]
+    if (!c || !A.getAttribute('src')) return
+    if (S.ospite || Date.now() - (c.riprovato || 0) < 60e3 || !Archivio.percorso(c.vid)) return avviso('Non riesco a riprodurre questo file', true)
+    // dopo una pausa lunga il link di Dropbox (4 ore) scade: se ne chiede uno nuovo e si riparte dallo stesso punto
+    c.riprovato = Date.now()
+    const dove = A.currentTime
+    Dbx.scordaLink(Archivio.percorso(c.vid))
+    sorgente(c.vid).then(url => {
+      if (S.coda[S.i] !== c) return
+      A.src = url
+      quandoPronto(() => { salta(dove); A.play().catch(() => {}) })
+    }, () => avviso('Non riesco a riprodurre questo file', true))
+  },
 })
 for (const [nome, f] of Object.entries(EVENTI)) A.addEventListener(nome, f)
 
@@ -1032,14 +1060,23 @@ if (navigator.mediaSession) {
   az('seekbackward', null)  // niente ±10 s: al loro posto iOS mette i tasti dei brani
   az('seekforward', null)
 }
+// i dati del brano si danno solo quando cambia: riscriverli a ogni ridisegno fa ripartire la scheda su iOS
+let chiaveSessione = ''
 function sessione(c, x, sub, p, uc) {
   const MS = navigator.mediaSession
   if (!MS) return
+  const chiave = [c.vid, x.nome, sub, uc].join('|')
+  if (chiave === chiaveSessione) return statoSessione()
+  chiaveSessione = chiave
   try {
     MS.metadata = new MediaMetadata({ title: x.nome + (c.etichetta ? ` (${c.etichetta})` : ''), artist: sub, album: p ? p.titolo : 'Bounces',
       artwork: [uc ? { src: uc, sizes: '512x512' } : { src: new URL('icona-512.png', location.href).href, sizes: '512x512', type: 'image/png' }] })
-    MS.playbackState = A.paused ? 'paused' : 'playing'
   } catch {}
+  statoSessione()
+}
+// play/pausa vanno detti a iOS subito dagli eventi dell'audio: il ridisegno a volte salta (dito sullo schermo)
+function statoSessione() {
+  try { navigator.mediaSession.playbackState = A.paused ? 'paused' : 'playing' } catch {}
   posizioneSessione()
 }
 // la barra della schermata di blocco: durata e punto in cui sei
@@ -1115,7 +1152,13 @@ $('#pl-play').addEventListener('click', () => { if (S.coda[S.i]) A.paused ? A.pl
 $('#pl-prec').addEventListener('click', () => A.currentTime > 3 || S.i === 0 ? salta(0) : vai(S.i - 1))
 $('#pl-succ').addEventListener('click', prossimo)
 $('#pl-loop').addEventListener('click', () => { S.loop = !S.loop; disegnaPlayer() })
-$('#pl-casuale').addEventListener('click', () => { S.casuale = !S.casuale; disegnaPlayer() })
+$('#pl-casuale').addEventListener('click', () => {
+  S.casuale = !S.casuale
+  S.dopo = S.casuale && S.coda.length > 1 ? aCaso() : null  // il nuovo "prossimo" si prepara subito
+  const dopo = S.coda[S.dopo ?? S.i + 1]
+  if (dopo) prepara(dopo.vid)
+  disegnaPlayer()
+})
 $('#pl-muto').addEventListener('click', () => {
   A.muted = !A.muted
   $('#pl-muto').innerHTML = A.muted || !A.volume ? IC.muto : IC.volume

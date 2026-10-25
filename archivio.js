@@ -139,6 +139,8 @@ const Dbx = {
     cacheLink.set(path, { url: j.link, scade: Date.now() + 3.5 * 3600e3 })
     return j.link
   },
+  // link scaduto o rifiutato da Dropbox: al prossimo giro se ne chiede uno nuovo
+  scordaLink(path) { cacheLink.delete(path) },
   // per disegnare subito: se il link non c'è ancora lo chiede e richiama poi()
   linkSubito(path, poi) {
     const c = cacheLink.get(path)
