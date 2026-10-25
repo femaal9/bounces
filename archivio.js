@@ -256,11 +256,13 @@ const Archivio = {
   },
 
   // ogni modifica è una funzione sulla libreria: se un altro dispositivo ha salvato nel frattempo, la si riapplica sulla sua versione
-  cambia(op) {
+  // schede = false per i cambi che chi ascolta da un link non vede (ordine della libreria, ultimi ascolti)
+  cambia(op, schede = true) {
     op(this.lib)
     this.pendenti.push(op)
     clearTimeout(this.timer)
     this.timer = setTimeout(() => this.salva(), 500)
+    if (!schede) return
     // i progetti condivisi aggiornano la loro scheda: chi ha il link sente le versioni nuove senza un link nuovo
     clearTimeout(this.timerSchede)
     this.timerSchede = setTimeout(aggiornaSchede, 2500)
@@ -342,7 +344,7 @@ function vistaLibreria() {
   }).sort((a, b) => b.modificato - a.modificato)
   const cartelle = l.cartelle.map(c => ({ ...c, n: l.progetti.filter(p => p.cartella_id === c.id).length }))
     .sort((a, b) => a.titolo.localeCompare(b.titolo, 'it', { sensitivity: 'base' }))
-  return { progetti, cartelle, brani, foto_autori: { ...(l.foto_autori || {}) } }
+  return { progetti, cartelle, brani, foto_autori: { ...(l.foto_autori || {}) }, ordine: l.ordine_libreria || 'ascoltati' }
 }
 
 function vistaProgetto(pid) {
@@ -377,6 +379,13 @@ async function revocaLinkVersioni(vids) {
 
 const ROTTE = {
   'GET libreria': () => vistaLibreria(),
+  // ordine della libreria (25/10, Matteo): 'ascoltati', 'alfabetico' o 'personale' (trascinando). Uguale su Mac e telefono
+  'PATCH libreria': (_, d) => Archivio.cambia(l => { if (d.ordine) l.ordine_libreria = d.ordine }, false),
+  'POST libreria/ordine': (_, d) => Archivio.cambia(l => {
+    d.ids.forEach((id, i) => { const p = l.progetti.find(x => x.id === id); if (p) p.posizione = i })
+    l.ordine_libreria = 'personale'
+  }, false),
+  'POST progetti/:id/ascoltato': n => Archivio.cambia(l => { const p = l.progetti.find(x => x.id === n); if (p) p.ascoltato = adesso() }, false),
 
   'POST progetti': (_, d) => {
     const id = nuovoId(), ora = adesso(), sfondo = 1 + Math.floor(Math.random() * 10)

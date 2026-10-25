@@ -117,6 +117,15 @@ textarea.campo:hover { background: #2a2a2a; }
 .voce small { color: var(--tenue); font-size: 13px; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .voce small svg { width: 12px; height: 12px; color: var(--verde); }
 .voce .suono { margin-left: auto; color: var(--verde); }
+/* ordine della libreria (25/10): "Ultimi ascoltati ≡" in alto a destra, come Spotify; maniglia per trascinare */
+.lib-ordine { display: flex; align-items: center; gap: 6px; width: fit-content; margin: 0 4px 4px auto; padding: 6px 8px; font-size: 13px; color: var(--tenue); }
+.lib-ordine:hover { color: var(--testo); }
+.lib-ordine svg { width: 16px; height: 16px; }
+.voce .maniglia { margin-left: auto; flex: none; display: grid; place-items: center; width: 36px; height: 36px; color: var(--tenue); cursor: grab; touch-action: none; }
+.voce .suono + .maniglia { margin-left: 0; }
+.voce .maniglia svg { width: 20px; height: 20px; }
+.voce.trascinata { background: var(--hover2); box-shadow: 0 6px 20px rgba(0,0,0,.5); position: relative; z-index: 1; }
+.voce.trascinata .maniglia { cursor: grabbing; color: var(--testo); }
 
 /* --- cover, avatar, colori --- */
 .cover { background: #282828 center / cover no-repeat; position: relative; overflow: hidden; }
@@ -368,6 +377,7 @@ body.trascina-file .zona-file, body.trascina-file .vuoto { border-color: var(--v
 .menu button { display: block; width: 100%; text-align: left; padding: 10px 12px; border-radius: 2px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu button:hover { background: #3e3e3e; }
 .menu button.pericolo { color: var(--pericolo); }
+.menu button.on { color: var(--verde); font-weight: 600; }
 .menu hr { border: 0; border-top: 1px solid #3e3e3e; margin: 4px 0; }
 .menu .titoletto { padding: 8px 12px 4px; font-size: 11px; color: var(--tenue); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 #caricamenti { position: fixed; right: 16px; bottom: calc(var(--player) + 12px); width: 300px; display: flex; flex-direction: column; gap: 6px; z-index: 40; }

@@ -23,6 +23,8 @@ const IC = {
   scarica: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
   cestino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   commento: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>',
+  ordine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h11M4 18h6"/></svg>',
+  maniglia: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8h16M4 12h16M4 16h16"/></svg>',
   spillo: '<svg viewBox="0 0 24 24"><path d="M14.6 2.3a1 1 0 0 1 1.4 0l5.7 5.7a1 1 0 0 1-.3 1.6l-3.3 1.5-3 3 .6 4.1a1 1 0 0 1-1.7.9l-3.6-3.6-5.7 5.7a1 1 0 0 1-1.4-1.4l5.7-5.7-3.6-3.6a1 1 0 0 1 .9-1.7l4.1.6 3-3 1.5-3.3a1 1 0 0 1 .2-.3z"/></svg>',
   chiudi: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   volume: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
@@ -182,7 +184,15 @@ const alfabetico = (a, b) => S.info.get(a.id).nome.localeCompare(S.info.get(b.id
 const braniDi = pid => S.lib.brani.filter(b => b.progetto_id === pid)
   .sort(S.perId.get(pid)?.ordine_manuale ? (a, b) => a.ordine - b.ordine || a.id - b.id : alfabetico)
 const preferiti = () => S.lib.brani.filter(b => b.preferito).sort((a, b) => (b.preferito_il || 0) - (a.preferito_il || 0))
-const progettiOrdinati = () => S.lib.progetti.slice().sort((a, b) => (b.fissato - a.fissato) || (b.modificato - a.modificato))
+// ordine della libreria (25/10, Matteo): ultimi ascoltati, alfabetico o personalizzato. I fissati restano sempre in cima
+const ORDINI = { ascoltati: 'Ultimi ascoltati', alfabetico: 'Alfabetico', personale: 'Personalizzato' }
+const perOrdine = {
+  ascoltati: (a, b) => (b.ascoltato || 0) - (a.ascoltato || 0) || b.modificato - a.modificato,
+  alfabetico: (a, b) => a.titolo.localeCompare(b.titolo, 'it', { sensitivity: 'base', numeric: true }),
+  // i progetti nuovi (ancora senza posizione) vanno in cima, finché non li sposti
+  personale: (a, b) => (a.posizione ?? -1) - (b.posizione ?? -1) || b.modificato - a.modificato,
+}
+const progettiOrdinati = () => S.lib.progetti.slice().sort((a, b) => (b.fissato - a.fissato) || (perOrdine[S.lib.ordine] || perOrdine.ascoltati)(a, b))
 
 // la lista di brani di un contesto di ascolto ("progetto:3", "autore:rondine", "preferiti")
 function braniContesto(ctx) {
@@ -317,12 +327,14 @@ function disegnaLibreria(dove = $('#lib-lista')) {
       <div class="cover cartella">${IC.cartella}</div><span class="vt"><b>${esc(f.titolo)}</b><small>Cartella · ${f.n === 1 ? '1 progetto' : (f.n || 0) + ' progetti'}</small></span></a>`).join('')
       || '<p class="muted" style="padding:8px">Nessuna cartella. Creane una col +.</p>'
   } else {
-    const np = preferiti().length
-    html = `<a class="voce ${vista === 'preferiti' ? 'attiva' : ''} ${S.contesto === 'preferiti' && c ? 'suona' : ''}" href="#/preferiti">
+    const np = preferiti().length, pers = S.lib.ordine === 'personale' && !S.ospite
+    html = (S.ospite ? '' : `<button class="lib-ordine" data-az="ordine-lib" title="Ordina per">${esc(ORDINI[S.lib.ordine] || ORDINI.ascoltati)}${IC.ordine}</button>`)
+      + `<a class="voce ${vista === 'preferiti' ? 'attiva' : ''} ${S.contesto === 'preferiti' && c ? 'suona' : ''}" href="#/preferiti">
         <div class="cover preferiti">${IC.cuorePieno}</div><span class="vt"><b>Preferiti</b><small>${IC.spillo}Playlist · ${nBrani(np)}</small></span></a>`
-      + progettiOrdinati().map(p => `<a class="voce ${vista === 'progetto' && +arg === p.id ? 'attiva' : ''} ${c && c.pid === p.id ? 'suona' : ''}" href="#/progetto/${p.id}">
+      + progettiOrdinati().map(p => `<a class="voce ${vista === 'progetto' && +arg === p.id ? 'attiva' : ''} ${c && c.pid === p.id ? 'suona' : ''} ${p.fissato ? 'fissato' : ''}" href="#/progetto/${p.id}" data-p="${p.id}" ${pers ? 'draggable="false"' : ''}>
         ${coverHtml(p)}<span class="vt"><b>${esc(p.titolo)}</b><small>${p.fissato ? IC.spillo : ''}Progetto · ${esc(p.artista || nBrani(p.n_brani))}</small></span>
-        ${c && c.pid === p.id && !A.paused ? `<span class="suono">${IC.volume}</span>` : ''}</a>`).join('')
+        ${c && c.pid === p.id && !A.paused ? `<span class="suono">${IC.volume}</span>` : ''}
+        ${pers && !p.fissato ? `<span class="maniglia" data-az="maniglia" title="Trascina per spostare">${IC.maniglia}</span>` : ''}</a>`).join('')
   }
   dove.innerHTML = html
 }
@@ -801,6 +813,7 @@ async function vai(i) {
   if (i < 0 || i >= S.coda.length) return
   S.i = i
   const c = S.coda[i]
+  segnaAscolto(c.pid)
   S.dett = null
   // a schermo bloccato si resta sullo stesso <audio>: iOS non fa partire quello nuovo e perde i comandi
   const giaPronto = document.hidden || IOS ? null : pronti.get(c.vid), salto = S.saltaDopo
@@ -836,6 +849,15 @@ async function vai(i) {
   }
   try { S.dett = await api('GET', `/api/versioni/${c.vid}`) } catch {}
   if (S.coda[S.i] === c) disegnaPunti()
+}
+// "ultimi ascoltati": il progetto si segna quando parte un suo brano. Se è già il primo e da poco, non si riscrive la libreria
+function segnaAscolto(pid) {
+  const p = S.perId.get(pid), ora = Date.now() / 1000
+  if (S.ospite || !p) return
+  const primo = S.lib.progetti.reduce((m, x) => (x.ascoltato || 0) > (m.ascoltato || 0) ? x : m, {})
+  if (primo === p && ora - p.ascoltato < 300) return
+  p.ascoltato = ora
+  api('POST', `/api/progetti/${pid}/ascoltato`).catch(() => {})
 }
 // da dove si ascolta: link temporaneo di Dropbox, o il link pubblico se è un ascolto condiviso
 function sorgenteSubito(vid) {
@@ -1225,7 +1247,7 @@ function menu(x, y, voci, contesto = {}) {
     m.classList.add('foglio')
   }
   m.innerHTML = voci.map(v => v === '-' ? '<hr>' : v.titoletto ? `<div class="titoletto">${esc(v.titoletto)}</div>`
-    : `<button data-az="${v.az}" ${v.arg != null ? `data-arg="${esc(v.arg)}"` : ''} class="${v.pericolo ? 'pericolo' : ''}">${esc(v.testo)}</button>`).join('')
+    : `<button data-az="${v.az}" ${v.arg != null ? `data-arg="${esc(v.arg)}"` : ''} class="${v.pericolo ? 'pericolo' : ''} ${v.on ? 'on' : ''}">${esc(v.testo)}</button>`).join('')
   Object.assign(m.dataset, contesto)
   document.body.append(m)
   if (m.classList.contains('foglio')) return
@@ -1697,6 +1719,49 @@ $('#principale').addEventListener('drop', async e => {
   try { await api('POST', `/api/progetti/${rotta().arg}/ordine`, { ids }); await ricarica() } catch (err) { sbaglio(err) }
 })
 
+// ordine personalizzato della libreria: si trascina il progetto dalla maniglia, col mouse o col dito (25/10, Matteo)
+;(() => {
+  let voce = null, lista = null, y = 0, giro = 0
+  const sposta = () => {
+    const mobili = $$('.voce[data-p]:not(.fissato)', lista)
+    const dopo = mobili.find(x => x !== voce && y < x.getBoundingClientRect().top + x.offsetHeight / 2)
+    if (dopo) { if (voce.nextElementSibling !== dopo) dopo.before(voce) }
+    else if (mobili.at(-1) !== voce) mobili.at(-1).after(voce)
+  }
+  // vicino al bordo la lista scorre da sola
+  const passo = () => {
+    const sc = telefono() ? $('#principale') : $('#lib-lista'), r = sc.getBoundingClientRect()
+    if (y < r.top + 56) sc.scrollTop -= 8
+    else if (y > r.bottom - 56) sc.scrollTop += 8
+    sposta()
+    giro = requestAnimationFrame(passo)
+  }
+  document.addEventListener('pointerdown', e => {
+    const h = e.target.closest('.maniglia')
+    if (!h) return
+    e.preventDefault()
+    voce = h.closest('.voce')
+    lista = voce.parentElement
+    y = e.clientY
+    voce.classList.add('trascinata')
+    h.setPointerCapture(e.pointerId)
+    giro = requestAnimationFrame(passo)
+  })
+  document.addEventListener('pointermove', e => { if (voce) y = e.clientY })
+  const fine = () => {
+    if (!voce) return
+    cancelAnimationFrame(giro)
+    voce.classList.remove('trascinata')
+    const ids = $$('.voce[data-p]', lista).map(x => +x.dataset.p)
+    voce = lista = null
+    ids.forEach((id, i) => { const p = S.perId.get(id); if (p) p.posizione = i })
+    S.lib.ordine = 'personale'
+    api('POST', '/api/libreria/ordine', { ids }).catch(sbaglio)
+  }
+  document.addEventListener('pointerup', fine)
+  document.addEventListener('pointercancel', fine)
+})()
+
 // --- clic ---
 // su una riga: un clic seleziona, doppio clic suona (come Spotify); sul telefono basta un tocco
 document.addEventListener('dblclick', e => {
@@ -1769,6 +1834,21 @@ document.addEventListener('click', async e => {
       case 'nuova-cartella': return nuovaCartella()
       case 'carica-auto': return scegliAudio(true, f => caricaBrani(null, f))
       case 'filtro': S.filtro = arg; return ridisegna()
+      case 'ordine-lib': {
+        e.preventDefault()
+        const r = t.getBoundingClientRect()
+        return menu(r.left, r.bottom + 6, [{ titoletto: 'Ordina per' }, ...Object.entries(ORDINI).map(([k, testo]) => ({ testo, az: 'ordina-lib', arg: k, on: (S.lib.ordine || 'ascoltati') === k }))])
+      }
+      case 'ordina-lib': {
+        // la prima volta il personalizzato parte dall'ordine che si stava guardando
+        const ids = arg === 'personale' && !S.lib.progetti.some(p => p.posizione != null) && progettiOrdinati().map(p => p.id)
+        if (ids) ids.forEach((id, i) => { S.perId.get(id).posizione = i })
+        S.lib.ordine = arg
+        ridisegna()  // subito; il salvataggio su Dropbox va dopo
+        if (arg === 'personale') avviso('Trascina i progetti dalla maniglia a destra')
+        return ids ? api('POST', '/api/libreria/ordine', { ids }) : api('PATCH', '/api/libreria', { ordine: arg })
+      }
+      case 'maniglia': e.preventDefault(); return  // il tocco sulla maniglia non apre il progetto
       case 'menu-progetto': return menuProgetto(t)
       case 'aggiungi': return scegliAudio(true, f => caricaBrani(pid, f))
       case 'fissa': await api('PATCH', `/api/progetti/${pid}`, { fissato: S.perId.get(pid).fissato ? 0 : 1 }); return ricarica()
