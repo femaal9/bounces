@@ -521,9 +521,10 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
   #player.vuoto-pl { display: none; }
   #schede { padding-bottom: env(safe-area-inset-bottom); }
   /* barra in alto: logo, ricerca, account sulla stessa riga */
-  /* BOUNCES sfocato (25/10, Matteo): iOS sfoca il primo elemento attaccato al bordo in alto, su tutta la sua altezza.
-     La barra non tocca il bordo: lo spazio di ora e batteria è un margine (sfondo della pagina), non un pezzo della barra */
-  #barra { margin-top: env(safe-area-inset-top); }
+  /* BOUNCES sfocato (25/10, Matteo): iOS sfoca la cima delle app web, a meno che lì ci sia una barra fissa a tinta unita
+     (allora ne prende il colore). Quindi la barra è fissa e nera; la prima riga della griglia le tiene solo il posto */
+  #barra { position: fixed; top: 0; left: 0; right: 0; z-index: 30; height: calc(56px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top) !important; background: var(--nero); }
   #barra { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
   #barra .logo { font-size: 17px; }
   .barra-dx { display: flex; }
