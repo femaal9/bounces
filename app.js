@@ -129,6 +129,8 @@ function scomponi(titolo) {
   if (d) { t = d[1].trim(); interprete = d[2].trim() }
   return { nome: (t || String(titolo || '')).toLocaleUpperCase('it'), interprete, tag, autori }  // titoli sempre in maiuscolo
 }
+// 26/10, Matteo: nome artista sotto il titolo del brano sempre in MAIUSCOLO, solo a schermo (i dati restano come sono)
+const maiu = s => String(s || '').toLocaleUpperCase('it')
 const maiuscoleIniziali = s => s.toLowerCase().replace(/(^|\s)\S/g, x => x.toUpperCase())
 
 // --- stato ---
@@ -442,7 +444,7 @@ const sceltaStato = (vid, stato) => vid ? `<span class="stato" data-s="${stato |
 function rigaBrano(b, i, multi, ordinabile) {
   const x = S.info.get(b.id), p = S.perId.get(b.progetto_id), c = S.coda[S.i]
   const ora = c && c.bid === b.id, suona = ora && !A.paused
-  const sotto = [b.artista || x.interprete, x.autori.join(', ')].filter(Boolean).join(' · ')
+  const sotto = [maiu(b.artista || x.interprete), x.autori.join(', ')].filter(Boolean).join(' · ')
   // il link dell'audio si chiede prima del clic: così il play parte subito (e su iPhone parte davvero)
   if (b.audio && !S.ospite) Dbx.linkSubito(Archivio.percorso(b.versione_id))
   return `<div class="tr ${b.audio ? '' : 'muto'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
@@ -675,7 +677,7 @@ function pannello() {
     <div class="pn-titolo"><input class="campo" data-brano="titolo" value="${esc(b.titolo)}" spellcheck="false" title="Titolo (gli autori tra parentesi in fondo)">
       <button class="ic cuore ${lb.preferito ? 'on' : ''}" data-az="cuore" data-arg="${b.id}">${lb.preferito ? IC.cuorePieno : IC.cuore}</button></div>
     <input class="campo pn-artista" data-brano="artista" value="${esc(b.artista || '')}" placeholder="Artista" spellcheck="false">
-    <p class="pn-sotto">${[!b.artista && x.interprete && esc(x.interprete), ...x.autori.map(a => `<a href="#/autore/${encodeURIComponent(norm(a))}">${esc(a)}</a>`)].filter(Boolean).join(', ') || (b.artista ? '' : esc(p.titolo))}</p>
+    <p class="pn-sotto">${[!b.artista && x.interprete && esc(maiu(x.interprete)), ...x.autori.map(a => `<a href="#/autore/${encodeURIComponent(norm(a))}">${esc(a)}</a>`)].filter(Boolean).join(', ') || (b.artista ? '' : esc(p.titolo))}</p>
     <div class="carta"><h3>Info</h3>
       <div class="pn-meta">
         <label>BPM<input class="campo" data-versione="bpm" inputmode="decimal" value="${v.bpm ?? ''}" placeholder="${v.bpm_auto ? Math.round(v.bpm_auto) + ' (auto)' : '—'}"></label>
@@ -899,7 +901,7 @@ function disegnaPlayer() {
   cov.style.backgroundImage = uc ? `url('${uc}')` : ''
   $('#pl-titolo').textContent = x.nome + (b && b.nver > 1 && c.etichetta ? ` (${c.etichetta})` : '')
   $('#pl-titolo').href = `#/progetto/${c.pid}`
-  $('#pl-sub').textContent = [(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p && p.titolo) || ''
+  $('#pl-sub').textContent = [maiu((b && b.artista) || x.interprete), ...x.autori].filter(Boolean).join(', ') || (p && p.titolo) || ''
   sessione(c, x, $('#pl-sub').textContent, p, uc)
   const cu = $('#pl-cuore')
   cu.classList.toggle('on', !!(b && b.preferito))
@@ -933,7 +935,7 @@ function disegnaSchermo() {
     <div class="sc-testa"><button class="ic" data-sc="chiudi" title="Chiudi">${IC.giu}</button>
       <div><small>${S.ospite ? 'In ascolto' : 'In riproduzione da'}</small><b>${esc(p ? p.titolo : '')}</b></div>${S.ospite ? '<span class="sc-vuoto"></span>' : `<button class="ic" data-sc="altro" title="Altro">${IC.altro}</button>`}</div>
     ${coverHtml(p, 'sc-cover')}
-    <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([(b && b.artista) || x.interprete, ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}</span></div>
+    <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([maiu((b && b.artista) || x.interprete), ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}</span></div>
       ${S.ospite ? '' : `<button class="ic cuore ${b && b.preferito ? 'on' : ''}" data-sc="cuore">${b && b.preferito ? IC.cuorePieno : IC.cuore}</button>`}</div>
     <div id="sc-barra"><div class="sc-binario"><div class="sc-pieno"></div></div></div>
     <div class="sc-tempi"><span id="sc-ora">0:00</span><span id="sc-tot">0:00</span></div>
