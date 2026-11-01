@@ -1863,7 +1863,7 @@ document.addEventListener('click', async e => {
       case 'sposta-nuova': return nuovaCartella(pid)
       case 'elimina-progetto': {
         const p = S.perId.get(pid)
-        if (!confirm(`Eliminare “${p.titolo}” con tutti i brani? I file vanno nel cestino di Bounces su Dropbox (cartella .bounces/cestino).`)) return
+        if (!confirm(`Eliminare “${p.titolo}” con tutti i brani? Non si può annullare.`)) return
         await api('DELETE', `/api/progetti/${pid}`)
         if (S.coda[S.i]?.pid === pid) { A.pause(); A.removeAttribute('src'); S.coda = []; S.i = -1 }
         if (S.pann && S.perBrano.get(S.pann.bid)?.progetto_id === pid) S.pann = null
@@ -1884,7 +1884,7 @@ document.addEventListener('click', async e => {
       case 'rendi-attiva': await api('PATCH', `/api/brani/${pb.id}`, { versione_attiva: vid }); return ricarica()
       case 'elimina-versione': {
         const v = pb.versioni.find(x => x.id === vid)
-        if (!confirm(`Eliminare la versione ${v.etichetta}${v.commenti.length ? ' e i suoi commenti' : ''}?`)) return
+        if (!confirm(`Eliminare la versione ${v.etichetta}${v.commenti.length ? ' e i suoi commenti' : ''}? Non si può annullare.`)) return
         await api('DELETE', `/api/versioni/${vid}`)
         return ricarica()
       }
@@ -1922,7 +1922,7 @@ document.addEventListener('click', async e => {
 
 async function eliminaBrano(bid) {
   const b = S.perBrano.get(bid)
-  if (!confirm(`Eliminare “${S.info.get(bid).nome}” con tutte le versioni?`)) return
+  if (!confirm(`Eliminare “${S.info.get(bid).nome}” con tutte le versioni? Non si può annullare.`)) return
   await api('DELETE', `/api/brani/${bid}`)
   if (S.pann && S.pann.bid === bid) S.pann = null
   if (S.coda[S.i]?.bid === bid) { A.pause(); S.coda.splice(S.i, 1); S.i = -1 }

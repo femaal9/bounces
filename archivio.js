@@ -5,7 +5,6 @@
 'use strict'
 const DROPBOX_CHIAVE = 'n4cc976oiv2lwlt'
 const LIBRERIA = '/.bounces/libreria.json'
-const CESTINO = '/.bounces/cestino'   // niente si cancella davvero: i file eliminati dall'app finiscono qui
 const RITORNO = location.origin + location.pathname
 
 const memo = {
@@ -155,10 +154,10 @@ const Dbx = {
   async sposta(da, a) {
     return (await this.rpc('files/move_v2', { from_path: da, to_path: a, autorename: true })).metadata
   },
-  async alCestino(path) {
+  // niente cestino: quello che si elimina dall'app è eliminato
+  async elimina(path) {
     if (!path) return
-    const nome = path.split('/').pop()
-    try { await this.sposta(path, `${CESTINO}/${Date.now()} ${nome}`) } catch (e) { console.warn('cestino', path, e) }
+    try { await this.rpc('files/delete_v2', { path }) } catch (e) { console.warn('elimina', path, e) }
   },
 
   // link pubblico (chi ce l'ha ascolta): {url} è quello di Dropbox (serve per revocarlo), {diretto} va dritto al file
@@ -409,8 +408,8 @@ const ROTTE = {
     const bids = new Set(l.brani.filter(b => b.progetto_id === n).map(b => b.id))
     const vids = new Set(l.versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
     if (p.condivisione) await revocaCondivisione(n)
-    for (const v of l.versioni) if (vids.has(v.id)) await Dbx.alCestino(v.path)
-    await Dbx.alCestino(p.cover)
+    for (const v of l.versioni) if (vids.has(v.id)) await Dbx.elimina(v.path)
+    await Dbx.elimina(p.cover)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => !vids.has(m.versione_id))
       l.versioni = l.versioni.filter(v => !vids.has(v.id))
@@ -419,7 +418,7 @@ const ROTTE = {
     })
   },
   'DELETE progetti/:id/cover': async n => {
-    await Dbx.alCestino(trova('progetti', n).cover)
+    await Dbx.elimina(trova('progetti', n).cover)
     Archivio.cambia(l => { const p = l.progetti.find(x => x.id === n); if (p) { p.cover = null; p.modificato = adesso() } })
   },
   'POST progetti/:id/ordine': (n, d) => {
@@ -460,7 +459,7 @@ const ROTTE = {
     const vs = L().versioni.filter(v => v.brano_id === n)
     const vids = new Set(vs.map(v => v.id))
     await revocaLinkVersioni(vids)
-    for (const v of vs) await Dbx.alCestino(v.path)
+    for (const v of vs) await Dbx.elimina(v.path)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => !vids.has(m.versione_id))
       l.versioni = l.versioni.filter(v => v.brano_id !== n)
@@ -484,7 +483,7 @@ const ROTTE = {
     const altre = L().versioni.filter(x => x.brano_id === b.id && x.id !== n).sort((x, y) => y.creato - x.creato)
     if (!altre.length) throw new Error("È l'unica versione: elimina il brano")
     await revocaLinkVersioni(new Set([n]))
-    await Dbx.alCestino(v.path)
+    await Dbx.elimina(v.path)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => m.versione_id !== n)
       l.versioni = l.versioni.filter(x => x.id !== n)
@@ -650,7 +649,7 @@ async function collegaAudioDropbox(vid, file, progresso) {
   const v = trova('versioni', vid), b = trova('brani', v.brano_id), p = trova('progetti', b.progetto_id)
   const { blob, ext } = await preparaAudio(file)
   const m = await Dbx.carica(`${cartellaBrano(p.titolo, b.titolo)}/${pulisci(v.etichetta || 'V1')}.${ext}`, blob, { progresso })
-  if (v.path) { await revocaLinkVersioni(new Set([vid])); await Dbx.alCestino(v.path) }
+  if (v.path) { await revocaLinkVersioni(new Set([vid])); await Dbx.elimina(v.path) }
   Archivio.cambia(l => {
     const x = l.versioni.find(y => y.id === vid)
     if (x) Object.assign(x, { path: m.path_display, nome_file: file.name, dimensione: blob.size, picchi: null, link: null, link_url: null })
@@ -663,7 +662,7 @@ async function copertinaDropbox(pid, file) {
   const p = trova('progetti', pid)
   const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[file.type] || 'jpg'
   const m = await Dbx.carica(`${cartellaProgetto(p.titolo)}/cover.${ext}`, file, { modo: 'overwrite', autorename: false })
-  if (p.cover && p.cover.toLowerCase() !== m.path_lower) await Dbx.alCestino(p.cover)
+  if (p.cover && p.cover.toLowerCase() !== m.path_lower) await Dbx.elimina(p.cover)
   cacheLink.delete(m.path_display)
   Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x) { x.cover = m.path_display; x.modificato = adesso() } })
 }
@@ -677,7 +676,7 @@ async function fotoAutoreDropbox(chiave, file) {
 async function togliFotoAutore(chiave) {
   const p = (L().foto_autori || {})[chiave]
   if (!p) return
-  await Dbx.alCestino(p)
+  await Dbx.elimina(p)
   Archivio.cambia(l => { if (l.foto_autori) delete l.foto_autori[chiave] })
 }
 
@@ -767,7 +766,7 @@ async function revocaCondivisione(pid) {
   const vids = new Set(L().versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
   await revocaLinkVersioni(vids)
   await Dbx.revoca(p.cover_url)
-  await Dbx.alCestino(c.path)
+  await Dbx.elimina(c.path)
   Archivio.cambia(l => {
     const x = l.progetti.find(y => y.id === pid)
     if (x) { delete x.condivisione; x.cover_link = x.cover_url = x.cover_di = null }
