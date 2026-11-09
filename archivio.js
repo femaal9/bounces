@@ -81,7 +81,7 @@ const Dbx = {
     const j = await r.json().catch(() => ({}))
     if (!r.ok) {
       if (r.status === 400 || r.status === 401) memo.set('bounces-refresh', null)
-      throw new Error('Accesso a Dropbox scaduto: ricollegalo')
+      throw Object.assign(new Error('Accesso a Dropbox scaduto: ricollegalo'), { stato: r.status })
     }
     this.token = j.access_token
     this.scade = Date.now() + (j.expires_in - 60) * 1000
@@ -239,19 +239,47 @@ const Archivio = {
   lib: null, rev: null, pendenti: [], salvando: null, timer: null,
   vuota: () => ({ formato: 1, progetti: [], cartelle: [], brani: [], versioni: [], commenti: [] }),
 
+  // senza rete (o con la rete che non risponde in 10 s, in macchina) si apre la copia salvata su questo dispositivo:
+  // si ascoltano i brani scaricati per l'offline, e le modifiche partono quando torna la rete (09/11, Matteo)
+  senzaRete: false,
   async apri() {
     try {
-      const r = await Dbx.scarica(LIBRERIA)
-      const meta = JSON.parse(r.headers.get('Dropbox-API-Result') || '{}')
-      this.lib = await r.json()
-      this.rev = meta.rev || (await Dbx.rpc('files/get_metadata', { path: LIBRERIA })).rev
+      const leggi = (async () => {
+        const r = await Dbx.scarica(LIBRERIA)
+        const meta = JSON.parse(r.headers.get('Dropbox-API-Result') || '{}')
+        return { lib: await r.json(), rev: meta.rev || (await Dbx.rpc('files/get_metadata', { path: LIBRERIA })).rev }
+      })()
+      let ris = await Promise.race([leggi, new Promise(ok => setTimeout(ok, 10000))])
+      if (!ris && !(await Off.libLocale())) ris = await leggi  // nessuna copia: si aspetta la rete
+      if (!ris) throw new Error('rete lenta')
+      this.lib = ris.lib
+      this.rev = ris.rev
+      this.senzaRete = false
+      Off.salvaLib(this.lib, this.rev)
     } catch (e) {
-      if (e.stato !== 409 || !/not_found/.test(e.message)) throw e
-      this.lib = this.vuota()
-      this.rev = null
+      if (e.stato === 409 && /not_found/.test(e.message)) { this.lib = this.vuota(); this.rev = null; this.senzaRete = false }
+      else {
+        if (e.stato) throw e  // errore vero di Dropbox, non di rete
+        const copia = await Off.libLocale()
+        if (!copia) throw new Error('Senza rete: collegati una volta per avere la libreria anche offline')
+        this.lib = copia.lib
+        this.rev = copia.rev
+        this.senzaRete = true
+      }
     }
     const v = this.vuota()
     for (const k of Object.keys(v)) if (!(k in this.lib)) this.lib[k] = v[k]
+  },
+
+  // tornata la rete: libreria nuova da Dropbox, e sopra le modifiche fatte offline
+  async riconnetti() {
+    if (!this.senzaRete || this.salvando) return false
+    const ops = this.pendenti.slice()
+    try { await this.apri() } catch { return false }
+    if (this.senzaRete) return false
+    for (const op of ops) op(this.lib)
+    if (ops.length) this.salva()
+    return true
   },
 
   // ogni modifica è una funzione sulla libreria: se un altro dispositivo ha salvato nel frattempo, la si riapplica sulla sua versione
@@ -278,8 +306,11 @@ const Archivio = {
           const m = await Dbx.carica(LIBRERIA, corpo, this.rev ? { modo: 'update', rev: this.rev, autorename: false } : { modo: 'add', autorename: false })
           this.rev = m.rev
           this.pendenti.splice(0, n)
+          Off.salvaLib(this.lib, this.rev)
           return
         } catch (e) {
+          // senza rete le modifiche restano in attesa e si riprova ogni 20 s
+          if (!e.stato) { this.senzaRete = true; clearTimeout(this.timer); this.timer = setTimeout(() => this.salva(), 20000); return }
           if (e.stato !== 409 || !/conflict/.test(e.message)) throw e
           await this.apri()
           for (const op of this.pendenti) op(this.lib)
@@ -297,6 +328,7 @@ const Archivio = {
 
   // tornando sull'app: se un altro dispositivo ha cambiato qualcosa, si ricarica
   async cambiataAltrove() {
+    if (this.senzaRete) return this.riconnetti()
     if (!this.lib || this.pendenti.length || this.salvando) return false
     try {
       const m = await Dbx.rpc('files/get_metadata', { path: LIBRERIA })
@@ -373,7 +405,7 @@ async function rinominaCartella(da, a) {
 
 // link pubblici di versioni e copertina del progetto (per spegnerli quando la condivisione finisce)
 async function revocaLinkVersioni(vids) {
-  for (const v of L().versioni) if (vids.has(v.id) && v.link_url) await Dbx.revoca(v.link_url)
+  for (const v of L().versioni) if (vids.has(v.id)) { if (v.link_url) await Dbx.revoca(v.link_url); if (v.link_l_url) await Dbx.revoca(v.link_l_url) }
 }
 
 const ROTTE = {
@@ -408,7 +440,7 @@ const ROTTE = {
     const bids = new Set(l.brani.filter(b => b.progetto_id === n).map(b => b.id))
     const vids = new Set(l.versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
     if (p.condivisione) await revocaCondivisione(n)
-    for (const v of l.versioni) if (vids.has(v.id)) await Dbx.elimina(v.path)
+    for (const v of l.versioni) if (vids.has(v.id)) { await Dbx.elimina(v.path); await Dbx.elimina(v.leggero) }
     await Dbx.elimina(p.cover)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => !vids.has(m.versione_id))
@@ -459,7 +491,7 @@ const ROTTE = {
     const vs = L().versioni.filter(v => v.brano_id === n)
     const vids = new Set(vs.map(v => v.id))
     await revocaLinkVersioni(vids)
-    for (const v of vs) await Dbx.elimina(v.path)
+    for (const v of vs) { await Dbx.elimina(v.path); await Dbx.elimina(v.leggero) }
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => !vids.has(m.versione_id))
       l.versioni = l.versioni.filter(v => v.brano_id !== n)
@@ -484,6 +516,7 @@ const ROTTE = {
     if (!altre.length) throw new Error("È l'unica versione: elimina il brano")
     await revocaLinkVersioni(new Set([n]))
     await Dbx.elimina(v.path)
+    await Dbx.elimina(v.leggero)
     Archivio.cambia(l => {
       l.commenti = l.commenti.filter(m => m.versione_id !== n)
       l.versioni = l.versioni.filter(x => x.id !== n)
@@ -650,9 +683,11 @@ async function collegaAudioDropbox(vid, file, progresso) {
   const { blob, ext } = await preparaAudio(file)
   const m = await Dbx.carica(`${cartellaBrano(p.titolo, b.titolo)}/${pulisci(v.etichetta || 'V1')}.${ext}`, blob, { progresso })
   if (v.path) { await revocaLinkVersioni(new Set([vid])); await Dbx.elimina(v.path) }
+  await Dbx.elimina(v.leggero)
   Archivio.cambia(l => {
     const x = l.versioni.find(y => y.id === vid)
-    if (x) Object.assign(x, { path: m.path_display, nome_file: file.name, dimensione: blob.size, picchi: null, link: null, link_url: null })
+    if (x) Object.assign(x, { path: m.path_display, nome_file: file.name, dimensione: blob.size, picchi: null, link: null, link_url: null,
+      leggero: null, leggero_dim: null, link_l: null, link_l_url: null })
     tocca(l, b.progetto_id)
   })
   return { versione_id: vid, blob }
@@ -678,6 +713,15 @@ async function togliFotoAutore(chiave) {
   if (!p) return
   await Dbx.elimina(p)
   Archivio.cambia(l => { if (l.foto_autori) delete l.foto_autori[chiave] })
+}
+
+// copia leggera di una versione (09/11): MP3 320 in /.bounces/ascolto/<id>.mp3. Fuori dalle cartelle dei brani,
+// così rinominare o spostare un brano non la tocca. L'originale resta quello caricato
+const ASCOLTO = '/.bounces/ascolto'
+async function salvaLeggera(vid, mp3) {
+  if (!L().versioni.some(v => v.id === vid)) return
+  const m = await Dbx.carica(`${ASCOLTO}/${vid}.mp3`, mp3, { modo: 'overwrite', autorename: false })
+  Archivio.cambia(l => { const x = l.versioni.find(y => y.id === vid); if (x) Object.assign(x, { leggero: m.path_display, leggero_dim: mp3.size, link_l: null, link_l_url: null }) })
 }
 
 // --- link d'ascolto sempre aggiornato (24/10) ---
@@ -707,16 +751,21 @@ async function aggiornaScheda(pid) {
   for (const b of brani) {
     const v = l.versioni.find(x => x.id === b.versione_attiva)
     if (!v || !v.path) continue
-    if (!v.link) {
+    // chi ascolta dal link sente la copia leggera (MP3 320) se c'è: niente scatti col telefono (09/11)
+    if (v.leggero && !v.link_l) {
+      const lk = await Dbx.linkPubblico(v.leggero)
+      Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link_l = lk.diretto; x.link_l_url = lk.url } })
+    } else if (!v.leggero && !v.link) {
       const lk = await Dbx.linkPubblico(v.path)
       Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link = lk.diretto; x.link_url = lk.url } })
     }
+    const vv = L().versioni.find(x => x.id === v.id) || v
     // waveform leggera per chi ascolta: 100 valori da 0 a 9 in una stringa
     const pc = v.picchi && v.picchi.length ? Array.from({ length: 100 }, (_, i) => {
       const da = Math.floor(i * v.picchi.length / 100), a = Math.max(da + 1, Math.floor((i + 1) * v.picchi.length / 100))
       return Math.round(Math.max(...v.picchi.slice(da, a)) * 9)
     }).join('') : ''
-    voci.push([b.titolo, v.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
+    voci.push([b.titolo, vv.leggero ? vv.link_l : vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)
@@ -770,7 +819,7 @@ async function revocaCondivisione(pid) {
   Archivio.cambia(l => {
     const x = l.progetti.find(y => y.id === pid)
     if (x) { delete x.condivisione; x.cover_link = x.cover_url = x.cover_di = null }
-    for (const v of l.versioni) if (vids.has(v.id)) v.link = v.link_url = null
+    for (const v of l.versioni) if (vids.has(v.id)) v.link = v.link_url = v.link_l = v.link_l_url = null
   })
 }
 

@@ -756,3 +756,27 @@ body.ospite .tr .ver { visibility: visible; }
 .testa .avatar .cambia { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); opacity: 0; transition: .15s; font-size: 15px; font-weight: 700; text-transform: none; }
 @media (hover: hover) { .avatar-cambia:hover .cambia { opacity: 1; } }
 .link-piccolo { background: none; border: 0; padding: 0 0 0 10px; color: rgba(255,255,255,.7); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
+
+/* offline (09/11): freccia nel tondo come Spotify. Verde = sul dispositivo; pulsa mentre scarica */
+.azioni .ic.offline { position: relative; }
+.azioni .ic.offline svg { width: 28px; height: 28px; }
+.ic.offline small { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: var(--verde); white-space: nowrap; }
+.off-ic { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-right: 5px; color: var(--verde); flex: none; vertical-align: -2px; }
+.off-ic svg { width: 13px; height: 13px; }
+.voce small .off-ic svg { width: 12px; height: 12px; }
+.arriva, .ic.offline.arriva svg { animation: arriva 1.4s ease-in-out infinite; }
+@keyframes arriva { 50% { opacity: .35; } }
+/* senza rete: i brani non scaricati restano in lista ma spenti; in alto la barra "Offline" */
+.tr.spento { opacity: .4; }
+.tr.spento:hover { background: transparent; }
+body.senza-rete .logo::after { content: "OFFLINE"; margin-left: 10px; font-size: 10px; font-weight: 800; letter-spacing: .08em; color: #000; background: var(--tenue); border-radius: 10px; padding: 2px 8px; vertical-align: 3px; }
+/* impostazioni */
+.modale.impostazioni { max-width: 440px; }
+.imp { display: grid; gap: 8px; padding: 14px 0; border-top: 1px solid #2a2a2a; }
+.imp:first-of-type { border-top: 0; }
+.imp small { color: var(--tenue); font-size: 13px; }
+.imp small.muted { color: var(--spento); font-size: 12px; }
+.imp .btn { justify-self: start; }
+.imp-scelta { display: flex; gap: 8px; flex-wrap: wrap; }
+.imp-scelta button { height: 32px; padding: 0 14px; border-radius: 16px; background: var(--campo); font-size: 13px; font-weight: 600; }
+.imp-scelta button.on { background: var(--testo); color: #000; }

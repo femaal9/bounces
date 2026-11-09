@@ -41,6 +41,9 @@ const IC = {
   cartella: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>',
   pannello: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>',
   matita: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  // disponibile offline (09/11): freccia giù nel tondo, come su Spotify
+  offline: '<svg viewBox="0 0 24 24"><path d="M12 1.5a10.5 10.5 0 1 0 0 21 10.5 10.5 0 0 0 0-21zm4.7 11.2-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V7a1 1 0 1 1 2 0v6.6l2.3-2.3a1 1 0 0 1 1.4 1.4z"/></svg>',
+  offlineVuoto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.6"/><path d="M12 7.2v9M8.2 12.6 12 16.4l3.8-3.8"/></svg>',
   mano: '<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
 }
 
@@ -100,13 +103,13 @@ function coloreTesto(s) {
   return COLORI[h % 10 + 1]
 }
 // copertine: link temporaneo di Dropbox (arriva un attimo dopo: intanto grigio), nei link d'ascolto un link pubblico
-const urlCover = p => !p || !p.cover ? null : p.coverUrl || Dbx.linkSubito(p.cover, ridisegnaPresto)
+const urlCover = p => !p || !p.cover ? null : p.coverUrl || Off.cover.get(p.cover) || (Archivio.senzaRete ? null : Dbx.linkSubito(p.cover, ridisegnaPresto))
 const coverStile = p => { const u = urlCover(p); return u ? `style="background-image:url('${u}')"` : '' }
 const coverClasse = p => p && p.cover ? 'cover' : `cover sf-${(p && p.sfondo) || 1}`
 const coverHtml = (p, extra = '') => `<div class="${coverClasse(p)} ${extra}" ${coverStile(p)}></div>`
 const iniziali = nome => nome.split(/\s+/).map(x => x[0]).join('').slice(0, 2)
 // con la foto dell'autore se c'è (25/10), altrimenti le iniziali sul suo colore
-const urlFotoAutore = a => { const p = S.lib && S.lib.foto_autori && S.lib.foto_autori[a.chiave]; return p ? Dbx.linkSubito(p, ridisegnaPresto) : null }
+const urlFotoAutore = a => { const p = S.lib && S.lib.foto_autori && S.lib.foto_autori[a.chiave]; return p && !Archivio.senzaRete ? Dbx.linkSubito(p, ridisegnaPresto) : null }
 const avatarHtml = (a, extra = '') => {
   const u = urlFotoAutore(a)
   return `<div class="avatar ${u ? 'foto' : ''} ${extra}" style="background-color:${coloreTesto(a.chiave)}${u ? `;background-image:url('${u}')` : ''}">${u ? '' : esc(iniziali(a.nome))}${extra ? '<span class="cambia">Scegli foto</span>' : ''}</div>`
@@ -205,6 +208,9 @@ function braniContesto(ctx) {
   return []
 }
 
+// si può ascoltare: ha l'audio e, senza rete, è scaricato sul dispositivo
+const suonabile = b => b.audio && (S.ospite || !Archivio.senzaRete || Off.ha(b.versione_id))
+
 function campoAttivo() {
   const a = document.activeElement
   return a && a.matches('input:not([type=checkbox]), textarea, select') && a.closest('#principale, #pannello')
@@ -228,6 +234,7 @@ function ridisegna() {
   if (!S.lib) return
   if (campoAttivo() || premuto) { S.sporco = true; return }
   S.sporco = false
+  document.body.classList.toggle('senza-rete', !S.ospite && Archivio.senzaRete)
   const main = $('#principale'), su = main.scrollTop
   disegnaPagina()
   main.scrollTop = su
@@ -332,9 +339,9 @@ function disegnaLibreria(dove = $('#lib-lista')) {
     const np = preferiti().length, pers = S.lib.ordine === 'personale' && !S.ospite
     html = (S.ospite ? '' : `<button class="lib-ordine" data-az="ordine-lib" title="Ordina per">${esc(ORDINI[S.lib.ordine] || ORDINI.ascoltati)}${IC.ordine}</button>`)
       + `<a class="voce ${vista === 'preferiti' ? 'attiva' : ''} ${S.contesto === 'preferiti' && c ? 'suona' : ''}" href="#/preferiti">
-        <div class="cover preferiti">${IC.cuorePieno}</div><span class="vt"><b>Preferiti</b><small>${IC.spillo}Playlist · ${nBrani(np)}</small></span></a>`
+        <div class="cover preferiti">${IC.cuorePieno}</div><span class="vt"><b>Preferiti</b><small>${IC.spillo}${S.ospite ? '' : iconaOffline(preferiti(), Off.scelto('pref'))}Playlist · ${nBrani(np)}</small></span></a>`
       + progettiOrdinati().map(p => `<a class="voce ${vista === 'progetto' && +arg === p.id ? 'attiva' : ''} ${c && c.pid === p.id ? 'suona' : ''} ${p.fissato ? 'fissato' : ''}" href="#/progetto/${p.id}" data-p="${p.id}" ${pers ? 'draggable="false"' : ''}>
-        ${coverHtml(p)}<span class="vt"><b>${esc(p.titolo)}</b><small>${p.fissato ? IC.spillo : ''}Progetto · ${esc(p.artista || nBrani(p.n_brani))}</small></span>
+        ${coverHtml(p)}<span class="vt"><b>${esc(p.titolo)}</b><small>${p.fissato ? IC.spillo : ''}${S.ospite ? '' : iconaOffline(braniDi(p.id), Off.scelto('p', p.id))}Progetto · ${esc(p.artista || nBrani(p.n_brani))}</small></span>
         ${c && c.pid === p.id && !A.paused ? `<span class="suono">${IC.volume}</span>` : ''}
         ${pers && !p.fissato ? `<span class="maniglia" data-az="maniglia" title="Trascina per spostare">${IC.maniglia}</span>` : ''}</a>`).join('')
   }
@@ -345,7 +352,7 @@ function disegnaLibreria(dove = $('#lib-lista')) {
 function card(p) {
   const ctx = 'progetto:' + p.id
   return `<a class="card" href="#/progetto/${p.id}"><div class="cw">${coverHtml(p)}
-    ${p.n_brani > p.senza_audio ? `<button class="pv ${suonaCtx(ctx) ? 'suona' : ''}" data-suona="${ctx}">${suonaCtx(ctx) ? IC.pausa : IC.play}</button>` : ''}</div>
+    ${braniDi(p.id).some(suonabile) ? `<button class="pv ${suonaCtx(ctx) ? 'suona' : ''}" data-suona="${ctx}">${suonaCtx(ctx) ? IC.pausa : IC.play}</button>` : ''}</div>
     <b>${esc(p.titolo)}</b><small>${esc([p.artista, nBrani(p.n_brani)].filter(Boolean).join(' · '))}</small></a>`
 }
 function cardAutore(a) {
@@ -446,10 +453,11 @@ function rigaBrano(b, i, multi, ordinabile) {
   const ora = c && c.bid === b.id, suona = ora && !A.paused
   const sotto = [maiu(b.artista || x.interprete), x.autori.join(', ')].filter(Boolean).join(' · ')
   // il link dell'audio si chiede prima del clic: così il play parte subito (e su iPhone parte davvero)
-  if (b.audio && !S.ospite) Dbx.linkSubito(Archivio.percorso(b.versione_id))
-  return `<div class="tr ${b.audio ? '' : 'muto'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
-    <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${b.audio ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
-    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${esc(sotto)}</small></span></span>
+  if (b.audio && !S.ospite && !Archivio.senzaRete && !Off.ha(b.versione_id)) Dbx.linkSubito(percorsoAscolto(b.versione_id))
+  const off = !S.ospite && b.audio && Off.ha(b.versione_id), inArrivo = !off && !S.ospite && Off.scarica_.has(b.versione_id)
+  return `<div class="tr ${b.audio ? '' : 'muto'} ${suonabile(b) ? '' : 'spento'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
+    <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${suonabile(b) ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
+    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${off ? `<span class="off-ic" title="Disponibile offline">${IC.offline}</span>` : inArrivo ? `<span class="off-ic arriva" title="Scarico per l’offline">${IC.offline}</span>` : ''}${esc(sotto)}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
     <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4"><span class="ver-et">${esc(b.etichetta || '')}</span>`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
@@ -490,7 +498,7 @@ function pagHome() {
     <div class="scorciatoie">${recenti.map(p => {
       const ctx = 'progetto:' + p.id
       return `<a class="scorciatoia" href="#/progetto/${p.id}">${coverHtml(p)}<b>${esc(p.titolo)}</b>
-        ${p.n_brani > p.senza_audio ? `<button class="pv ${suonaCtx(ctx) ? 'suona' : ''}" data-suona="${ctx}">${suonaCtx(ctx) ? IC.pausa : IC.play}</button>` : ''}</a>`
+        ${braniDi(p.id).some(suonabile) ? `<button class="pv ${suonaCtx(ctx) ? 'suona' : ''}" data-suona="${ctx}">${suonaCtx(ctx) ? IC.pausa : IC.play}</button>` : ''}</a>`
     }).join('')}</div>
     <div class="sezione-t"><h2>Aggiornati di recente</h2><a href="#/progetti">Mostra tutto</a></div>
     <div class="fila"><a class="card nuova" href="#" data-az="nuovo-progetto"><div class="cw"><div class="cover">${IC.piu}</div></div><b>Nuovo progetto</b><small>o trascina qui una cartella di bounce</small></a>${S.lib.progetti.map(card).join('')}</div>
@@ -552,8 +560,21 @@ function pagCerca() {
 }
 
 function bottonePlay(ctx, brani) {
-  if (!brani.some(b => b.audio)) return ''
+  if (!brani.some(suonabile)) return ''
   return `<button class="pv grande" data-suona="${esc(ctx)}" title="Riproduci">${suonaCtx(ctx) ? IC.pausa : IC.play}</button>`
+}
+
+// offline (09/11): tasto freccia nel tondo accanto al play, verde quando tutto è sul dispositivo
+function bottoneOffline(tipo, id, brani) {
+  const on = Off.scelto(tipo, id), { tot, fatti } = Off.conta(brani)
+  const titolo = !on ? 'Rendi disponibile offline' : fatti < tot ? `Scarico per l’offline: ${fatti} di ${tot}` : 'Disponibile offline: tocca per toglierlo'
+  return `<button class="ic offline ${on ? 'on' : ''} ${on && fatti < tot ? 'arriva' : ''}" data-az="offline" data-arg="${tipo}:${id}" title="${titolo}">${on ? IC.offline : IC.offlineVuoto}${on && fatti < tot ? `<small>${fatti}/${tot}</small>` : ''}</button>`
+}
+// freccina verde nella lista della libreria
+function iconaOffline(brani, scelto) {
+  if (!scelto) return ''
+  const { tot, fatti } = Off.conta(brani)
+  return `<span class="off-ic ${fatti < tot ? 'arriva' : ''}">${IC.offline}</span>`
 }
 
 function pagProgetto(arg) {
@@ -574,6 +595,7 @@ function pagProgetto(arg) {
     <div class="dopo-testa" style="--c:${col}">
       <div class="azioni">
         ${bottonePlay(ctx, brani)}
+        ${bottoneOffline('p', p.id, brani)}
         <button class="ic ${p.fissato ? 'on' : ''}" data-az="fissa" title="${p.fissato ? 'Togli dai fissati' : 'Fissa in alto nella libreria'}">${IC.spillo}</button>
         <button class="ic" data-az="aggiungi" title="Aggiungi brani">${IC.piuCerchio}</button>
         <button class="ic" data-az="menu-progetto" title="Altre opzioni">${IC.altro}</button>
@@ -623,7 +645,7 @@ function pagPreferiti() {
         <div class="meta"><span>${nBrani(brani.length)}</span></div></div>
     </section>
     <div class="dopo-testa" style="--c:${col}">
-      <div class="azioni">${bottonePlay('preferiti', brani)}</div>
+      <div class="azioni">${bottonePlay('preferiti', brani)}${brani.length ? bottoneOffline('pref', 0, brani) : ''}</div>
       ${brani.length ? tracklist(brani, { multi: true }) : '<div class="vuoto"><b>I brani che ti piacciono finiscono qui</b>Premi il cuore su un brano.</div>'}
     </div>`
 }
@@ -738,6 +760,7 @@ if (IOS) document.addEventListener('touchend', function sblocca() {
 function prepara(vid) {
   if (!vid || pronti.has(vid) || S.coda[S.i]?.vid === vid) return
   if (IOS) { if (!S.ospite && Archivio.percorso(vid)) sorgente(vid).catch(() => {}); return }
+  if (Off.ha(vid)) return  // offline: è già sul disco, niente da preparare
   const crea = url => {
     if (!url || pronti.has(vid)) return
     const el = new Audio()
@@ -776,8 +799,8 @@ function voce(b, v) {
 }
 
 function suonaContesto(ctx, bid = null) {
-  const lista = braniContesto(ctx).filter(b => b.audio)
-  if (!lista.length) return avviso('Nessun brano con l’audio qui', true)
+  const lista = braniContesto(ctx).filter(suonabile)
+  if (!lista.length) return avviso(Archivio.senzaRete ? 'Senza rete: qui non c’è niente di scaricato' : 'Nessun brano con l’audio qui', true)
   if (!bid && S.contesto === ctx && S.coda[S.i]) return A.paused ? A.play() : A.pause()
   S.contesto = ctx
   S.coda = lista.map(b => voce(b))
@@ -805,7 +828,7 @@ function suonaBrano(bid, vid = null) {
   // una versione diversa dall'attiva entra in coda al posto dell'attiva
   const v = vid && vid !== b.versione_id && S.pann && S.pann.prog.brani.find(x => x.id === bid)?.versioni.find(x => x.id === vid)
   S.contesto = ctx
-  S.coda = braniContesto(ctx).filter(x => x.audio).map(x => (v && x.id === bid ? voce(x, v) : voce(x)))
+  S.coda = braniContesto(ctx).filter(suonabile).map(x => (v && x.id === bid ? voce(x, v) : voce(x)))
   if (v && !S.coda.some(x => x.bid === bid)) S.coda.push(voce(b, v))
   vai(Math.max(0, S.coda.findIndex(x => x.bid === bid)))
   apriPlayer()
@@ -826,6 +849,9 @@ async function vai(i) {
     S.dopo = S.casuale && S.coda.length > 1 ? aCaso() : null
     const dopo = S.coda[S.dopo ?? i + 1]
     if (dopo) prepara(dopo.vid)  // il prossimo si carica mentre questo suona
+    // sul telefono il prossimo arriva intero in memoria, appena questo è tutto scaricato (così non si rubano banda):
+    // dal secondo brano in poi si suona dalla memoria, e i buchi di rete in macchina non si sentono (09/11)
+    if (dopo) Tmp.dopo(dopo.vid, sorgenteRete)
   }
   if (giaPronto) {
     pronti.delete(c.vid)
@@ -861,15 +887,25 @@ function segnaAscolto(pid) {
   p.ascoltato = ora
   api('POST', `/api/progetti/${pid}/ascoltato`).catch(() => {})
 }
-// da dove si ascolta: link temporaneo di Dropbox, o il link pubblico se è un ascolto condiviso
+// da dove si ascolta: il file offline sul dispositivo, se c'è; poi quello già in memoria (telefono);
+// se no il link temporaneo di Dropbox (copia leggera o originale), o il link pubblico se è un ascolto condiviso
 function sorgenteSubito(vid) {
+  const u = Off.url.get(vid) || Tmp.pronto(vid)
+  if (u) return u
   if (S.ospite) return S.lib.brani.find(b => b.versione_id === vid)?.url || null
-  const path = Archivio.percorso(vid)
+  if (Off.ha(vid) || Archivio.senzaRete) return null
+  const path = percorsoAscolto(vid)
   return path ? Dbx.linkSubito(path) : null
 }
 async function sorgente(vid) {
-  const path = Archivio.percorso(vid)
+  if (!S.ospite && Off.ha(vid)) { const u = await Off.urlDi(vid); if (u) return u }
+  return Tmp.pronto(vid) || sorgenteRete(vid)
+}
+async function sorgenteRete(vid) {
+  if (S.ospite) return S.lib.brani.find(b => b.versione_id === vid)?.url
+  const path = percorsoAscolto(vid)
   if (!path) throw new Error('Questo brano non ha ancora l’audio')
+  if (Archivio.senzaRete) throw new Error('Senza rete: questo brano non è scaricato sul dispositivo')
   return Dbx.link(path)
 }
 // in casuale il prossimo si sceglie appena parte un brano, così ha già il link pronto quando serve
@@ -1046,6 +1082,8 @@ Object.assign(EVENTI, {
   play: () => { comandi(); statoSessione(); ridisegna(); requestAnimationFrame(giro) },
   pause: () => { statoSessione(); ridisegna() },
   timeupdate: () => { if (A.paused) tempi() },
+  waiting: () => salvagente(),
+  stalled: () => salvagente(),
   loadedmetadata: () => { tempi(); disegnaPunti(); posizioneSessione() },
   seeked: () => posizioneSessione(),
   ended: () => {
@@ -1057,11 +1095,12 @@ Object.assign(EVENTI, {
   error: () => {
     const c = S.coda[S.i]
     if (!c || !A.getAttribute('src')) return
+    if (A.src.startsWith('blob:')) return avviso('Non riesco a riprodurre questo file', true)
     if (S.ospite || Date.now() - (c.riprovato || 0) < 60e3 || !Archivio.percorso(c.vid)) return avviso('Non riesco a riprodurre questo file', true)
     // dopo una pausa lunga il link di Dropbox (4 ore) scade: se ne chiede uno nuovo e si riparte dallo stesso punto
     c.riprovato = Date.now()
     const dove = A.currentTime
-    Dbx.scordaLink(Archivio.percorso(c.vid))
+    Dbx.scordaLink(percorsoAscolto(c.vid))
     sorgente(c.vid).then(url => {
       if (S.coda[S.i] !== c) return
       A.src = url
@@ -1119,8 +1158,8 @@ document.addEventListener('pointerover', e => {
   if (!r) return
   clearTimeout(attesaPrepara)
   attesaPrepara = setTimeout(() => {
-    if (r.dataset.suona) { const b = braniContesto(r.dataset.suona).find(x => x.audio); if (b) prepara(b.versione_id) }
-    else { const b = S.lib && S.lib.brani.find(x => x.id === +r.dataset.b); if (b && b.audio) prepara(b.versione_id) }
+    if (r.dataset.suona) { const b = braniContesto(r.dataset.suona).find(suonabile); if (b) prepara(b.versione_id) }
+    else { const b = S.lib && S.lib.brani.find(x => x.id === +r.dataset.b); if (b && suonabile(b)) prepara(b.versione_id) }
   }, 120)
 })
 window.addEventListener('resize', disegnaOndaPannello)
@@ -1265,6 +1304,7 @@ function menuProgetto(anchor) {
     { testo: 'Aggiungi brani', az: 'aggiungi' },
     ...(p.ordine_manuale ? [{ testo: 'Ordina in ordine alfabetico', az: 'alfabetico' }] : []),
     { testo: p.fissato ? 'Togli dai fissati' : 'Fissa nella libreria', az: 'fissa' },
+    Off.scelto('p', p.id) ? { testo: 'Togli da offline', az: 'offline', arg: 'p:' + p.id } : { testo: 'Rendi disponibile offline', az: 'offline', arg: 'p:' + p.id },
     '-',
     { testo: 'Scegli copertina', az: 'cover' },
     p.cover ? { testo: 'Togli copertina', az: 'togli-cover' } : { testo: 'Cambia colore', az: 'colore' },
@@ -1287,7 +1327,9 @@ function menuBrano(x, y, bid) {
     { testo: b.preferito ? 'Togli dai Preferiti' : 'Aggiungi ai Preferiti', az: 'm-cuore' },
     { testo: 'Nuova versione...', az: 'm-versione' },
     ...(rotta().vista !== 'progetto' ? [{ testo: 'Vai al progetto', az: 'm-progetto' }] : []),
-    ...(b.audio ? [{ testo: 'Scarica', az: 'm-scarica' }] : []),
+    ...(b.audio ? [Off.scelto('b', b.id) ? { testo: 'Togli da offline', az: 'offline', arg: 'b:' + b.id }
+      : Off.scelto('p', b.progetto_id) ? null : { testo: 'Rendi disponibile offline', az: 'offline', arg: 'b:' + b.id }].filter(Boolean) : []),
+    ...(b.audio ? [{ testo: 'Scarica il file', az: 'm-scarica' }] : []),
     '-',
     // se il nome del file è stato letto male, il brano si sposta (con le versioni e la cartella su Dropbox)
     { titoletto: 'Sposta in' },
@@ -1368,6 +1410,7 @@ async function caricaBrani(pid, files, cartella = '') {
       dove.set(ris.progetto_id, (dove.get(ris.progetto_id) || 0) + 1)
       await ricarica()  // il brano compare subito; durata, waveform, BPM e tonalità arrivano dall'analisi
       analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
+      Leggere.crea(ris.versione_id, () => ris.blob.arrayBuffer())  // copia leggera per l'ascolto dal telefono
     } catch (e) { sbaglio(e) }
     r.fine()
   }
@@ -1419,6 +1462,7 @@ async function caricaVersione(bid, file, collegaA = null) {
     avviso(collegaA ? 'Audio caricato' : 'Nuova versione caricata')
     await ricarica()
     analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
+    Leggere.crea(ris.versione_id, () => ris.blob.arrayBuffer())
   } catch (e) { sbaglio(e) }
   r.fine()
 }
@@ -1809,6 +1853,14 @@ document.addEventListener('click', async e => {
         catch { finestraLink(linkInMenu); avviso('Selezionalo e copialo a mano (Cmd+C)', true) }
         return
       case 'chiudi-menu': return
+      case 'offline': {
+        const [tipo, id] = arg.split(':'), on = !Off.scelto(tipo, +id)
+        if (!on && tipo !== 'b' && !confirm('Togliere i brani da questo dispositivo? Restano su Dropbox: senza rete però non si sentono più.')) return
+        Off.imposta(tipo, +id, on)
+        avviso(on ? (Archivio.senzaRete ? 'Lo scarico appena torna la rete' : 'Scarico sul dispositivo: lo senti anche senza rete') : 'Tolto da offline')
+        return ridisegna()
+      }
+      case 'impostazioni': return impostazioni()
       case 'scarica': return scaricaVersione(vid)
       case 'importa': return importaInediti()
       case 'esci':
@@ -2028,18 +2080,67 @@ $('#account').addEventListener('click', e => {
   const r = e.currentTarget.getBoundingClientRect()
   menu(r.right - 240, r.bottom + 6, [
     { titoletto: memo.get('bounces-nome') || 'Dropbox' },
+    { testo: 'Impostazioni', az: 'impostazioni' },
     ...(location.hostname === 'localhost' ? [{ testo: 'Importa da Inediti (Mac)', az: 'importa' }] : []),
     { testo: 'Scollega Dropbox', az: 'esci' },
   ])
 })
+
+// impostazioni (09/11): qualità d'ascolto, offline, spazio. Valgono per questo dispositivo
+async function impostazioni() {
+  const fondo = document.createElement('div')
+  fondo.className = 'modale-fondo'
+  const scelta = (nome, voci, val) => `<div class="imp-scelta">${voci.map(([k, t]) => `<button data-imp="${nome}" data-val="${k}" class="${k === val ? 'on' : ''}">${t}</button>`).join('')}</div>`
+  const disegna = async () => {
+    const spazio = await Off.spazio(), lc = Leggere.conteggio(), nOff = Off.file.size
+    fondo.innerHTML = `<div class="modale impostazioni">
+      <h3>Impostazioni</h3>
+      <div class="imp"><b>Qualità d'ascolto</b><small>La copia leggera è un MP3 a 320 kbps: in macchina e coi dati niente scatti. L'originale (WAV) resta sempre su Dropbox.</small>
+        ${scelta('qualita', [['auto', 'Automatica'], ['leggera', 'Leggera'], ['originale', 'Originale']], Imp.get('qualita', 'auto'))}
+        <small class="muted">Automatica: leggera sul telefono, originale sul computer.</small></div>
+      <div class="imp"><b>Download per l'offline</b>
+        ${scelta('qualita-offline', [['leggera', 'Leggera'], ['originale', 'Originale']], Imp.get('qualita-offline', 'leggera'))}
+        <small class="muted">Leggera: circa 7 MB a brano invece di 30.</small></div>
+      <div class="imp"><b>Sul dispositivo</b><small>${nOff ? `${nOff === 1 ? '1 brano' : nOff + ' brani'} offline · ` : 'Niente offline · '}${(spazio / 1e6).toFixed(spazio > 1e9 ? 0 : 1)} MB usati</small>
+        ${nOff ? '<button class="btn" data-togli-tutto>Togli tutti i download</button>' : ''}</div>
+      <div class="imp"><b>Copie leggere</b><small>${lc.fatte} di ${lc.tot} brani${lc.fatte < lc.tot ? (MOBILE ? '. Le altre le prepara il Mac con Bounces aperto.' : '. Le preparo io con Bounces aperto, una alla volta.') : '.'}</small></div>
+      <div class="fondo-modale"><button class="btn pieno" data-ok>Fatto</button></div></div>`
+  }
+  await disegna()
+  document.body.append(fondo)
+  fondo.addEventListener('click', async e => {
+    const b = e.target.closest('[data-imp]')
+    if (b) {
+      Imp.set(b.dataset.imp, b.dataset.val)
+      if (b.dataset.imp === 'qualita-offline') Off.sincronizza()
+      return disegna()
+    }
+    if (e.target.closest('[data-togli-tutto]')) {
+      if (!confirm('Togliere tutti i brani scaricati da questo dispositivo? Restano su Dropbox.')) return
+      await Off.togliTutto()
+      avviso('Download tolti')
+      return disegna()
+    }
+    if (e.target.closest('[data-ok]') || e.target === fondo) fondo.remove()
+  })
+}
 
 // tornando sull'app (altra scheda, telefono riaperto): se un altro dispositivo ha cambiato qualcosa, si ricarica
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) return
   if (S.ospite) return aggiornaOspite()
   if (!Dbx.collegato()) return
-  if (await Archivio.cambiataAltrove()) ricarica()
+  if (await Archivio.cambiataAltrove()) { await ricarica(); Off.sincronizza() }
 })
+
+// senza rete: si riprova ogni 30 s e appena il telefono dice che la rete è tornata
+async function riprovaRete() {
+  if (S.ospite || !Archivio.senzaRete || !Dbx.collegato()) return
+  if (await Archivio.riconnetti()) { avviso('Di nuovo online'); await ricarica(); Off.sincronizza() }
+}
+window.addEventListener('online', riprovaRete)
+setInterval(riprovaRete, 30000)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(e => console.warn('sw', e))
 
 async function leggiScheda(url) {
   const r = await fetch(url, { cache: 'no-store' })
@@ -2065,10 +2166,17 @@ async function aggiornaOspite() {
   avviso('Aggiornato: ci sono novità in questo progetto')
 }
 window.addEventListener('beforeunload', e => {
-  if (Archivio.pendenti.length || Archivio.salvando) { e.preventDefault(); e.returnValue = '' }
+  // senza rete non si chiede: non si salverebbe comunque, e l'app non deve restare bloccata
+  if (!Archivio.senzaRete && (Archivio.pendenti.length || Archivio.salvando)) { e.preventDefault(); e.returnValue = '' }
 })
 
 ;(async () => {
   try { if (await Dbx.ritorno()) avviso('Dropbox collegato') } catch (e) { sbaglio(e) }
-  mostra()
+  await Off.init()
+  await mostra()
+  if (S.lib && !S.ospite) {
+    if (Archivio.senzaRete) avviso('Senza rete: suonano i brani scaricati')
+    Off.sincronizza()
+    Leggere.avvia()
+  }
 })()
