@@ -3,8 +3,9 @@
 // - Off: progetti, brani e Preferiti "disponibili offline", come su Spotify/untitled. I file stanno nel dispositivo
 //   (Cache Storage, per ogni dispositivo la sua scelta), con la copia della libreria e le copertine: senza rete si apre
 //   l'app e suonano i brani scaricati.
-// - Leggere: copia MP3 320 di ogni versione (worker leggero.js). La crea chi carica il brano; quelle che mancano
-//   le fa il Mac in background quando Bounces è aperto, una alla volta. Sul telefono si ascolta quella.
+// - Leggere: copia MP3 320 (worker leggero.js) fatta dal dispositivo quando scarica un brano per l'offline: resta solo
+//   lì, su Dropbox non si aggiunge niente (09/11, Matteo: "non voglio riempire Dropbox"). Le 4 copie messe in
+//   /.bounces/ascolto la prima sera (campo `leggero`) si usano ancora per l'ascolto, ma non se ne creano altre.
 // - Tmp: sul telefono il prossimo brano della coda si scarica intero in memoria (appena quello in ascolto è tutto
 //   arrivato): dal secondo brano in poi si suona senza rete. Il brano in ascolto va in streaming come prima.
 'use strict'
@@ -92,7 +93,7 @@ const Off = {
     for (const b of l.brani) {
       if (!(sp.has(b.progetto_id) || sb.has(b.id) || (s.pref && b.preferito))) continue
       const v = perV.get(b.versione_attiva)
-      if (v && v.path) out.set(v.id, { v, pid: b.progetto_id, q: v.leggero && Imp.leggeraOffline() ? 'l' : 'o' })
+      if (v && v.path) out.set(v.id, { v, pid: b.progetto_id, q: Imp.leggeraOffline() && (v.leggero || (LOSSLESS.test(v.path) && !Leggere.falliti.has(v.id))) ? 'l' : 'o' })
     }
     return out
   },
@@ -147,11 +148,18 @@ const Off = {
   },
 
   async scarica(vid, { v, q }) {
-    const path = q === 'l' ? v.leggero : v.path
+    const path = q === 'l' && v.leggero ? v.leggero : v.path
     this.scarica_.add(vid)
     ridisegnaPresto()
     try {
       const r = await Dbx.scarica(path)
+      if (q === 'l' && !v.leggero) {
+        // copia leggera fatta qui: si scarica l'originale, si converte in MP3 320 e si tiene solo quello
+        let mp3
+        try { mp3 = await Leggere.codifica(await r.arrayBuffer()) }
+        catch (e) { Leggere.falliti.add(vid); console.warn('conversione', vid, e); return this.scarica(vid, { v, q: 'o' }) }
+        await conCache(c => c.put(BASE_OFF + `v/${vid}.l`, new Response(mp3, { headers: { 'Content-Type': 'audio/mpeg' } })))
+      } else
       // dritto nella cache, senza passare tutto dalla memoria (i WAV pesano)
       await conCache(c => c.put(BASE_OFF + `v/${vid}.${q}`, new Response(r.body, { headers: { 'Content-Type': tipoAudio(path) } })))
       const vecchia = this.file.get(vid)
@@ -231,7 +239,7 @@ const Leggere = {
       .map(x => x.v)
   },
 
-  // sul computer, con Bounces aperto: si fanno quelle che mancano (anche dei brani caricati prima del 09/11)
+  // (non più usata dal 09/11 sera: le copie non vanno più su Dropbox)
   async avvia() {
     if (MOBILE || this.avviato || S.ospite) return
     this.avviato = true

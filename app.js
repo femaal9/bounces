@@ -1410,7 +1410,6 @@ async function caricaBrani(pid, files, cartella = '') {
       dove.set(ris.progetto_id, (dove.get(ris.progetto_id) || 0) + 1)
       await ricarica()  // il brano compare subito; durata, waveform, BPM e tonalità arrivano dall'analisi
       analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
-      Leggere.crea(ris.versione_id, () => ris.blob.arrayBuffer())  // copia leggera per l'ascolto dal telefono
     } catch (e) { sbaglio(e) }
     r.fine()
   }
@@ -1462,7 +1461,6 @@ async function caricaVersione(bid, file, collegaA = null) {
     avviso(collegaA ? 'Audio caricato' : 'Nuova versione caricata')
     await ricarica()
     analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
-    Leggere.crea(ris.versione_id, () => ris.blob.arrayBuffer())
   } catch (e) { sbaglio(e) }
   r.fine()
 }
@@ -2092,18 +2090,14 @@ async function impostazioni() {
   fondo.className = 'modale-fondo'
   const scelta = (nome, voci, val) => `<div class="imp-scelta">${voci.map(([k, t]) => `<button data-imp="${nome}" data-val="${k}" class="${k === val ? 'on' : ''}">${t}</button>`).join('')}</div>`
   const disegna = async () => {
-    const spazio = await Off.spazio(), lc = Leggere.conteggio(), nOff = Off.file.size
+    const spazio = await Off.spazio(), nOff = Off.file.size
     fondo.innerHTML = `<div class="modale impostazioni">
       <h3>Impostazioni</h3>
-      <div class="imp"><b>Qualità d'ascolto</b><small>La copia leggera è un MP3 a 320 kbps: in macchina e coi dati niente scatti. L'originale (WAV) resta sempre su Dropbox.</small>
-        ${scelta('qualita', [['auto', 'Automatica'], ['leggera', 'Leggera'], ['originale', 'Originale']], Imp.get('qualita', 'auto'))}
-        <small class="muted">Automatica: leggera sul telefono, originale sul computer.</small></div>
       <div class="imp"><b>Download per l'offline</b>
         ${scelta('qualita-offline', [['leggera', 'Leggera'], ['originale', 'Originale']], Imp.get('qualita-offline', 'leggera'))}
-        <small class="muted">Leggera: circa 7 MB a brano invece di 30.</small></div>
+        <small>Leggera: MP3 a 320 kbps, circa 7 MB a brano invece di 30. La fa il dispositivo scaricando il brano e resta solo qui: su Dropbox non si aggiunge niente.</small></div>
       <div class="imp"><b>Sul dispositivo</b><small>${nOff ? `${nOff === 1 ? '1 brano' : nOff + ' brani'} offline · ` : 'Niente offline · '}${(spazio / 1e6).toFixed(spazio > 1e9 ? 0 : 1)} MB usati</small>
         ${nOff ? '<button class="btn" data-togli-tutto>Togli tutti i download</button>' : ''}</div>
-      <div class="imp"><b>Copie leggere</b><small>${lc.fatte} di ${lc.tot} brani${lc.fatte < lc.tot ? (MOBILE ? '. Le altre le prepara il Mac con Bounces aperto.' : '. Le preparo io con Bounces aperto, una alla volta.') : '.'}</small></div>
       <div class="fondo-modale"><button class="btn pieno" data-ok>Fatto</button></div></div>`
   }
   await disegna()
@@ -2177,6 +2171,5 @@ window.addEventListener('beforeunload', e => {
   if (S.lib && !S.ospite) {
     if (Archivio.senzaRete) avviso('Senza rete: suonano i brani scaricati')
     Off.sincronizza()
-    Leggere.avvia()
   }
 })()
