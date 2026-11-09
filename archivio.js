@@ -715,13 +715,17 @@ async function togliFotoAutore(chiave) {
   Archivio.cambia(l => { if (l.foto_autori) delete l.foto_autori[chiave] })
 }
 
-// copia leggera di una versione (09/11): MP3 320 in /.bounces/ascolto/<id>.mp3. Fuori dalle cartelle dei brani,
-// così rinominare o spostare un brano non la tocca. L'originale resta quello caricato
-const ASCOLTO = '/.bounces/ascolto'
-async function salvaLeggera(vid, mp3) {
-  if (!L().versioni.some(v => v.id === vid)) return
-  const m = await Dbx.carica(`${ASCOLTO}/${vid}.mp3`, mp3, { modo: 'overwrite', autorename: false })
-  Archivio.cambia(l => { const x = l.versioni.find(y => y.id === vid); if (x) Object.assign(x, { leggero: m.path_display, leggero_dim: mp3.size, link_l: null, link_l_url: null }) })
+// copie MP3 su Dropbox (solo la sera del 09/11, poi tolte: Matteo non vuole riempire Dropbox). La prima volta che
+// l'app si apre con la rete cancella la cartella /.bounces/ascolto e i campi in libreria.json; si ascoltano solo i WAV
+async function togliCopieAscolto() {
+  if (memo.get('bounces-ascolto-tolto') || Archivio.senzaRete || !Archivio.lib) return
+  try { await Dbx.rpc('files/delete_v2', { path: '/.bounces/ascolto' }) }
+  catch (e) { if (e.stato !== 409 || !/not_found/.test(e.message)) return console.warn('togli copie', e) }
+  const link = L().versioni.filter(v => v.link_l_url).map(v => v.link_l_url)
+  for (const u of link) await Dbx.revoca(u)
+  if (L().versioni.some(v => 'leggero' in v || 'link_l' in v))
+    Archivio.cambia(l => { for (const v of l.versioni) for (const k of ['leggero', 'leggero_dim', 'link_l', 'link_l_url']) delete v[k] })
+  memo.set('bounces-ascolto-tolto', '1')
 }
 
 // --- link d'ascolto sempre aggiornato (24/10) ---
@@ -751,11 +755,7 @@ async function aggiornaScheda(pid) {
   for (const b of brani) {
     const v = l.versioni.find(x => x.id === b.versione_attiva)
     if (!v || !v.path) continue
-    // chi ascolta dal link sente la copia leggera (MP3 320) se c'è: niente scatti col telefono (09/11)
-    if (v.leggero && !v.link_l) {
-      const lk = await Dbx.linkPubblico(v.leggero)
-      Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link_l = lk.diretto; x.link_l_url = lk.url } })
-    } else if (!v.leggero && !v.link) {
+    if (!v.link) {
       const lk = await Dbx.linkPubblico(v.path)
       Archivio.cambia(lb => { const x = lb.versioni.find(y => y.id === v.id); if (x) { x.link = lk.diretto; x.link_url = lk.url } })
     }
@@ -765,7 +765,7 @@ async function aggiornaScheda(pid) {
       const da = Math.floor(i * v.picchi.length / 100), a = Math.max(da + 1, Math.floor((i + 1) * v.picchi.length / 100))
       return Math.round(Math.max(...v.picchi.slice(da, a)) * 9)
     }).join('') : ''
-    voci.push([b.titolo, vv.leggero ? vv.link_l : vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
+    voci.push([b.titolo, vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)

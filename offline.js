@@ -4,8 +4,7 @@
 //   (Cache Storage, per ogni dispositivo la sua scelta), con la copia della libreria e le copertine: senza rete si apre
 //   l'app e suonano i brani scaricati.
 // - Leggere: copia MP3 320 (worker leggero.js) fatta dal dispositivo quando scarica un brano per l'offline: resta solo
-//   lì, su Dropbox non si aggiunge niente (09/11, Matteo: "non voglio riempire Dropbox"). Le 4 copie messe in
-//   /.bounces/ascolto la prima sera (campo `leggero`) si usano ancora per l'ascolto, ma non se ne creano altre.
+//   lì, su Dropbox non si aggiunge niente (09/11, Matteo: "non voglio riempire Dropbox"). In streaming solo i WAV.
 // - Tmp: sul telefono il prossimo brano della coda si scarica intero in memoria (appena quello in ascolto è tutto
 //   arrivato): dal secondo brano in poi si suona senza rete. Il brano in ascolto va in streaming come prima.
 'use strict'
@@ -29,7 +28,7 @@ const versione = vid => Archivio.lib && Archivio.lib.versioni.find(v => v.id ===
 function percorsoAscolto(vid) {
   const v = versione(vid)
   if (!v || !v.path) return null
-  return v.leggero && Imp.leggeraInAscolto() ? v.leggero : v.path
+  return v.path
 }
 
 const Off = {
@@ -93,7 +92,7 @@ const Off = {
     for (const b of l.brani) {
       if (!(sp.has(b.progetto_id) || sb.has(b.id) || (s.pref && b.preferito))) continue
       const v = perV.get(b.versione_attiva)
-      if (v && v.path) out.set(v.id, { v, pid: b.progetto_id, q: Imp.leggeraOffline() && (v.leggero || (LOSSLESS.test(v.path) && !Leggere.falliti.has(v.id))) ? 'l' : 'o' })
+      if (v && v.path) out.set(v.id, { v, pid: b.progetto_id, q: Imp.leggeraOffline() && LOSSLESS.test(v.path) && !Leggere.falliti.has(v.id) ? 'l' : 'o' })
     }
     return out
   },
@@ -148,12 +147,12 @@ const Off = {
   },
 
   async scarica(vid, { v, q }) {
-    const path = q === 'l' && v.leggero ? v.leggero : v.path
+    const path = v.path
     this.scarica_.add(vid)
     ridisegnaPresto()
     try {
       const r = await Dbx.scarica(path)
-      if (q === 'l' && !v.leggero) {
+      if (q === 'l') {
         // copia leggera fatta qui: si scarica l'originale, si converte in MP3 320 e si tiene solo quello
         let mp3
         try { mp3 = await Leggere.codifica(await r.arrayBuffer()) }
@@ -212,54 +211,6 @@ const Leggere = {
     if (r.errore) throw new Error(r.errore)
     return r.blob
   },
-
-  // una alla volta (memoria): dati = funzione che dà l'ArrayBuffer del file originale
-  crea(vid, dati) {
-    this.fila = this.fila.then(async () => {
-      const v = versione(vid)
-      if (!v || v.leggero || !LOSSLESS.test(v.path || '')) return
-      this.ora = vid
-      try {
-        await salvaLeggera(vid, await this.codifica(await dati()))
-        Off.sincronizza()  // chi ha la versione offline in originale passa a quella leggera
-      } catch (e) { this.falliti.add(vid); console.warn('copia leggera', vid, e) }
-      finally { this.ora = null }
-    })
-    return this.fila
-  },
-
-  // le versioni attive ancora senza copia leggera (prima quelle ascoltate di recente)
-  daFare() {
-    const l = Archivio.lib
-    if (!l) return []
-    const perV = new Map(l.versioni.map(v => [v.id, v])), perP = new Map(l.progetti.map(p => [p.id, p]))
-    return l.brani.map(b => ({ v: perV.get(b.versione_attiva), p: perP.get(b.progetto_id) }))
-      .filter(x => x.v && x.v.path && !x.v.leggero && LOSSLESS.test(x.v.path) && !this.falliti.has(x.v.id))
-      .sort((a, b) => ((b.p && b.p.ascoltato) || 0) - ((a.p && a.p.ascoltato) || 0))
-      .map(x => x.v)
-  },
-
-  // (non più usata dal 09/11 sera: le copie non vanno più su Dropbox)
-  async avvia() {
-    if (MOBILE || this.avviato || S.ospite) return
-    this.avviato = true
-    await pausa(8000)
-    for (;;) {
-      if (S.ospite || !Dbx.collegato()) { this.avviato = false; return }
-      if (Archivio.senzaRete) { await pausa(60000); continue }
-      const v = this.daFare()[0]
-      if (!v) { await pausa(5 * 60e3); continue }  // ricontrolla ogni tanto (versioni caricate da altri dispositivi)
-      await this.crea(v.id, async () => (await Dbx.scarica(v.path)).arrayBuffer())
-      if (!versione(v.id)?.leggero) this.falliti.add(v.id)
-    }
-  },
-  conteggio() {
-    const l = Archivio.lib
-    if (!l) return { fatte: 0, tot: 0 }
-    const perV = new Map(l.versioni.map(v => [v.id, v]))
-    const att = l.brani.map(b => perV.get(b.versione_attiva)).filter(v => v && v.path && LOSSLESS.test(v.path))
-    return { fatte: att.filter(v => v.leggero).length, tot: att.length }
-  },
 }
 
 // --- sul telefono: il prossimo brano intero in memoria (contro i buchi di rete) ---
@@ -286,7 +237,7 @@ const Tmp = {
   carica(vid, sorgenteRete) {
     if (!MOBILE || !vid || Off.ha(vid) || this.mappa.has(vid)) return
     const v = versione(vid)
-    if (v && !v.leggero && (v.dimensione || 0) > 90e6) return  // WAV enormi: in memoria no
+    if (v && (v.dimensione || 0) > 90e6) return  // WAV enormi: in memoria no
     const voce = { url: null }
     this.mappa.set(vid, voce)
     ;(async () => {

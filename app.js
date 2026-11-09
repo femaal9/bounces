@@ -2171,5 +2171,6 @@ window.addEventListener('beforeunload', e => {
   if (S.lib && !S.ospite) {
     if (Archivio.senzaRete) avviso('Senza rete: suonano i brani scaricati')
     Off.sincronizza()
+    togliCopieAscolto()
   }
 })()
