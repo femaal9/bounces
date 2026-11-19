@@ -573,6 +573,7 @@ body.trascina-file .zona-auto { border-color: var(--accento); color: var(--testo
 }
 /* chi ascolta da un link: vede lo stato dei brani (DEMO, MIX, MASTER...) */
 body.ospite .tr .ver { visibility: visible; }
+body.ospite .tr .ver { gap: 8px; color: var(--tenue); font-size: 13px; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) {
   body.ospite { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) calc(var(--player) + env(safe-area-inset-bottom)); grid-template-areas: "barra" "main" "player"; }
   body.ospite:has(#player.vuoto-pl) { grid-template-rows: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) 0; }

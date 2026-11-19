@@ -298,9 +298,9 @@ function benvenuto(msg = '') {
 // i dati di un link d'ascolto: {t: titolo, a: artista, s: sfondo, c: cover, b: [[titolo, url, durata, tonalità, bpm], ...]}
 function libOspite(d) {
   const ora = Date.now() / 1000
-  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista, pc], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
+  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista, pc, etichetta], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
     picchi: pc ? [...pc].map(x => +x / 9) : null,
-    preferito: 0, versione_id: i + 1000, etichetta: '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
+    preferito: 0, versione_id: i + 1000, etichetta: etichetta || '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
   const p = { id: 1, titolo: d.t || 'Progetto', artista: d.a || '', nota: '', cover: d.c ? 'condivisa' : null, coverUrl: d.c, sfondo: d.s || 1,
     fissato: 0, cartella_id: null, creato: ora, modificato: ora, n_brani: brani.length, senza_audio: 0,
     durata: brani.reduce((s, b) => s + (b.durata || 0), 0) }
@@ -1006,6 +1006,7 @@ $('#schermo').addEventListener('click', e => {
   if (az === 'succ') return prossimo()
   if (az === 'casuale') return $('#pl-casuale').click()
   if (az === 'loop') return $('#pl-loop').click()
+  if (S.ospite && ['cuore', 'altro', 'dettagli'].includes(az)) return  // chi ascolta dal link: solo ascolto
   if (az === 'cuore') return cuore(c.bid)
   if (az === 'altro') return menuBrano(0, 0, c.bid)
   if (az === 'dettagli') { S.schermo = false; disegnaSchermo(); return apriBrano(c.bid, true) }
@@ -1232,6 +1233,7 @@ $('#pl-muto').addEventListener('click', () => {
   $('#barra-volume .riempito').style.width = (A.muted ? 0 : A.volume * 100) + '%'
 })
 $('#pl-pannello').addEventListener('click', () => {
+  if (S.ospite) return
   const c = S.coda[S.i]
   if (!c) return
   if (S.pann && S.pann.bid === c.bid) { S.pann = null; return ridisegna() }
@@ -1254,7 +1256,7 @@ function barraTelefono() {
   document.body.classList.toggle('su-cerca', vista === 'cerca')
 }
 $('#indietro').addEventListener('click', () => { if (history.length > 1) history.back(); else location.hash = '#/' })
-$('#pl-cuore').addEventListener('click', () => { const c = S.coda[S.i]; if (c) cuore(c.bid) })
+$('#pl-cuore').addEventListener('click', () => { if (S.ospite) return; const c = S.coda[S.i]; if (c) cuore(c.bid) })
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.matches('input.campo')) return e.target.blur()
@@ -1338,9 +1340,11 @@ function menuBrano(x, y, bid) {
     { testo: 'Elimina brano', az: 'm-elimina', pericolo: true },
   ], { bid })
 }
+const OSPITE_PUO = new Set(['suona', 'chiudi-menu', 'entra'])
 document.addEventListener('contextmenu', e => {
+  if (S.ospite) return e.preventDefault()  // niente "Salva audio con nome" dal tasto destro
   const r = e.target.closest('.tr')
-  if (!r || S.ospite) return
+  if (!r) return
   e.preventDefault()
   S.scelta = +r.dataset.b
   $$('.tr').forEach(x => x.classList.toggle('scelta', +x.dataset.b === S.scelta))
@@ -1831,6 +1835,8 @@ document.addEventListener('click', async e => {
       return
     }
     const az = t.dataset.az, arg = t.dataset.arg
+    // chi ascolta da un link (l'artista): solo ascolto. Niente stato, versione, pannello, cuore o download (19/11)
+    if (S.ospite && az && !OSPITE_PUO.has(az)) return
     const riga = t.closest('.tr'), bRiga = riga && S.perBrano.get(+riga.dataset.b)
     const pb = S.pann && S.pann.prog.brani.find(x => x.id === S.pann.bid)
     const vr = t.closest('.ver-riga'), vid = vr && +vr.dataset.v
@@ -1984,6 +1990,7 @@ async function eliminaBrano(bid) {
 // --- campi modificabili (si salvano quando escono dal fuoco) ---
 document.addEventListener('change', async e => {
   const el = e.target
+  if (S.ospite && !el.closest('#player, #schermo')) return  // chi ascolta dal link non cambia niente
   try {
     if (el.dataset.progetto) {
       const pid = +rotta().arg
@@ -2176,5 +2183,6 @@ window.addEventListener('beforeunload', e => {
     if (Archivio.senzaRete) avviso('Senza rete: suonano i brani scaricati')
     Off.sincronizza()
     togliCopieAscolto()
+    aggiornaSchede()  // i link già mandati prendono subito le novità della scheda (es. la V, 19/11)
   }
 })()

@@ -773,7 +773,7 @@ async function aggiornaScheda(pid) {
       const da = Math.floor(i * v.picchi.length / 100), a = Math.max(da + 1, Math.floor((i + 1) * v.picchi.length / 100))
       return Math.round(Math.max(...v.picchi.slice(da, a)) * 9)
     }).join('') : ''
-    voci.push([b.titolo, vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc])
+    voci.push([b.titolo, vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc, v.etichetta || ''])  // etichetta (V1, V2...): 19/11, prima chi ascoltava non la vedeva
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)
