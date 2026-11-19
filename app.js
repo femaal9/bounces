@@ -1406,7 +1406,8 @@ async function caricaBrani(pid, files, cartella = '') {
   for (const f of files) {
     const r = rigaCaricamento(f.name)
     try {
-      const ris = await caricaBounce(f, { pid: pid || (senza.has(f) ? destino : null), artistaDefault: cartella, progresso: r.avanza })
+      const ris = await caricaBounce(f, { pid: pid || (senza.has(f) ? destino : null), artistaDefault: cartella, progresso: r.avanza,
+        separati: Imp.get('doppioni', 'versioni') === 'brani' })
       dove.set(ris.progetto_id, (dove.get(ris.progetto_id) || 0) + 1)
       await ricarica()  // il brano compare subito; durata, waveform, BPM e tonalità arrivano dall'analisi
       analizza(() => ris.blob.arrayBuffer(), ris.versione_id).then(ricarica)
@@ -2096,6 +2097,9 @@ async function impostazioni() {
       <div class="imp"><b>Download per l'offline</b>
         ${scelta('qualita-offline', [['leggera', 'Leggera'], ['originale', 'Originale']], Imp.get('qualita-offline', 'leggera'))}
         <small>Leggera: MP3 a 320 kbps, circa 7 MB a brano invece di 30. La fa il dispositivo scaricando il brano e resta solo qui: su Dropbox non si aggiunge niente.</small></div>
+      <div class="imp"><b>Brano che c'è già</b>
+        ${scelta('doppioni', [['versioni', 'Nuova versione'], ['brani', 'Brano a parte']], Imp.get('doppioni', 'versioni'))}
+        <small>Caricando un file con lo stesso titolo di un brano: lo aggiunge alle sue versioni, o fa un altro brano nella lista, distinto dal numero di V. Trascinarlo sopra un brano fa sempre una nuova versione.</small></div>
       <div class="imp"><b>Sul dispositivo</b><small>${nOff ? `${nOff === 1 ? '1 brano' : nOff + ' brani'} offline · ` : 'Niente offline · '}${(spazio / 1e6).toFixed(spazio > 1e9 ? 0 : 1)} MB usati</small>
         ${nOff ? '<button class="btn" data-togli-tutto>Togli tutti i download</button>' : ''}</div>
       <div class="fondo-modale"><button class="btn pieno" data-ok>Fatto</button></div></div>`

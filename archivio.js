@@ -639,7 +639,8 @@ function leggiNomeFile(nome, artistiNoti = []) {
 const artistaDi = p => (p && (p.artista || p.titolo)) || ''
 
 // pid: si sta caricando dentro un progetto (il file resta lì); artistaDefault: nome della cartella trascinata
-async function caricaBounce(file, { pid = null, artistaDefault = '', progresso } = {}) {
+// separati (19/11, amico di Matteo): un doppione non diventa una versione ma un brano a parte, distinto dal numero di V
+async function caricaBounce(file, { pid = null, artistaDefault = '', progresso, separati = false } = {}) {
   const l = L()
   const noti = [...l.progetti.flatMap(p => [p.titolo, p.artista]), ...l.brani.map(b => b.artista)].filter(Boolean)
   const info = leggiNomeFile(file.name, noti)
@@ -653,7 +654,14 @@ async function caricaBounce(file, { pid = null, artistaDefault = '', progresso }
     p = trova('progetti', id)
     progettoNuovo = true
   }
-  const b = L().brani.find(x => x.progetto_id === p.id && chiaveNome(titoloBase(x.titolo)) === chiaveNome(titoloBase(info.titolo)))
+  const uguali = L().brani.filter(x => x.progetto_id === p.id && chiaveNome(titoloBase(x.titolo)) === chiaveNome(titoloBase(info.titolo)))
+  // coi doppioni separati si riusa solo un brano importato senza audio; se no se ne fa uno nuovo
+  const vuoto = x => { const a = L().versioni.find(v => v.id === x.versione_attiva); return a && !a.path }
+  const b = separati ? uguali.find(vuoto) : uguali[0]
+  if (separati && !b && uguali.length && !info.versione) {  // senza V nel nome: il numero dopo l'ultimo doppione
+    const n = uguali.map(x => +((L().versioni.find(v => v.id === x.versione_attiva)?.etichetta || '').match(/\d+/) || [1])[0])
+    info.versione = 'V' + (Math.max(...n) + 1)
+  }
   let ris
   if (b) {
     const attiva = L().versioni.find(v => v.id === b.versione_attiva)
