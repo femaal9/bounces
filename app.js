@@ -2175,6 +2175,8 @@ window.addEventListener('beforeunload', e => {
   if (!Archivio.senzaRete && (Archivio.pendenti.length || Archivio.salvando)) { e.preventDefault(); e.returnValue = '' }
 })
 
+// link d'ascolto nuovi: ?a=DATI (vedi attivaCondivisione); dentro l'app si usa sempre #/ascolta/DATI
+{ const a = new URLSearchParams(location.search).get('a'); if (a) history.replaceState(null, '', location.origin + location.pathname + '#/ascolta/' + a) }
 ;(async () => {
   try { if (await Dbx.ritorno()) avviso('Dropbox collegato') } catch (e) { sbaglio(e) }
   await Off.init()

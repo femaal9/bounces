@@ -811,7 +811,8 @@ async function attivaCondivisione(pid) {
     Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x && x.condivisione) Object.assign(x.condivisione, { url: lk.url, diretto: lk.diretto }) })
     c = trova('progetti', pid).condivisione
   }
-  return RITORNO + '#/ascolta/' + await comprimi(JSON.stringify({ m: c.diretto }))
+  // nella ?a=... e non dopo il #: WhatsApp da PC (Web/Desktop) perde la parte dopo il # e l'artista vedeva "Collega Dropbox" (20/11)
+  return RITORNO + '?a=' + await comprimi(JSON.stringify({ m: c.diretto }))
 }
 
 // spegne il link d'ascolto: la scheda e i link pubblici dei file smettono di funzionare
