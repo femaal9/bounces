@@ -7,7 +7,7 @@ const DROPBOX_CHIAVE = 'n4cc976oiv2lwlt'
 const LIBRERIA = '/.bounces/libreria.json'
 const RITORNO = location.origin + location.pathname
 // server dei commenti di chi ascolta da un link (Cloudflare, 20/11). Vuoto = commenti degli artisti spenti
-const COMMENTI_API = ''
+const COMMENTI_API = 'https://bounces-3qh.pages.dev/api/'
 
 const memo = {
   get: k => { try { return localStorage.getItem(k) } catch { return null } },

@@ -43,7 +43,7 @@ export function rand(bytes){
   return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 // testo su una riga o più, senza caratteri di controllo
-export const pulisci = (s, max) => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f  ]/g, " ").trim().slice(0, max);
+export const pulisci = (s, max) => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]/g, " ").trim().slice(0, max);
 
 export async function readBody(request, maxBytes){
   const len = Number(request.headers.get("Content-Length") || 0);
