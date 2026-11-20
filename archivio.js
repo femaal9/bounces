@@ -6,6 +6,8 @@
 const DROPBOX_CHIAVE = 'n4cc976oiv2lwlt'
 const LIBRERIA = '/.bounces/libreria.json'
 const RITORNO = location.origin + location.pathname
+// server dei commenti di chi ascolta da un link (Cloudflare, 20/11). Vuoto = commenti degli artisti spenti
+const COMMENTI_API = ''
 
 const memo = {
   get: k => { try { return localStorage.getItem(k) } catch { return null } },
@@ -533,7 +535,11 @@ const ROTTE = {
     Archivio.cambia(l => { l.commenti.push({ id, versione_id: n, secondi: d.secondi ?? null, testo, creato }); tocca(l, b.progetto_id) })
     return { id }
   },
-  'DELETE commenti/:id': n => Archivio.cambia(l => { l.commenti = l.commenti.filter(m => m.id !== n) }),
+  'DELETE commenti/:id': n => {
+    const m = L().commenti.find(x => x.id === n)
+    if (m && m.ospite) Ospiti.cancella(m).catch(() => {})
+    Archivio.cambia(l => { l.commenti = l.commenti.filter(m => m.id !== n) })
+  },
 
   'POST cartelle': (_, d) => {
     const id = nuovoId(), creato = adesso()
@@ -773,7 +779,7 @@ async function aggiornaScheda(pid) {
       const da = Math.floor(i * v.picchi.length / 100), a = Math.max(da + 1, Math.floor((i + 1) * v.picchi.length / 100))
       return Math.round(Math.max(...v.picchi.slice(da, a)) * 9)
     }).join('') : ''
-    voci.push([b.titolo, vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc, v.etichetta || ''])  // etichetta (V1, V2...): 19/11, prima chi ascoltava non la vedeva
+    voci.push([b.titolo, vv.link, Math.round(v.durata || 0), v.tonalita || v.tonalita_auto || '', Math.round(v.bpm || v.bpm_auto || 0), v.stato || '', b.artista || '', pc, v.etichetta || '', v.id])  // id della versione (10°): i commenti di chi ascolta si agganciano lì (20/11). etichetta (V1, V2...): 19/11, prima chi ascoltava non la vedeva
   }
   if (p.cover && p.cover_di !== p.cover) {
     const lk = await Dbx.linkPubblico(p.cover)
@@ -812,6 +818,7 @@ async function attivaCondivisione(pid) {
     c = trova('progetti', pid).condivisione
   }
   // nella ?a=... e non dopo il #: WhatsApp da PC (Web/Desktop) perde la parte dopo il # e l'artista vedeva "Collega Dropbox" (20/11)
+  await Ospiti.registra(pid).catch(e => console.warn('commenti', e))
   return RITORNO + '?a=' + await comprimi(JSON.stringify({ m: c.diretto }))
 }
 
@@ -819,6 +826,7 @@ async function attivaCondivisione(pid) {
 async function revocaCondivisione(pid) {
   const p = trova('progetti', pid), c = p.condivisione
   if (!c) return
+  if (COMMENTI_API && c.diretto && c.segreto) await Ospiti.chiama('link', { k: await Ospiti.chiave(c.diretto), segreto: c.segreto, via: true }).catch(() => {})
   await Dbx.revoca(c.url)
   const bids = new Set(L().brani.filter(b => b.progetto_id === pid).map(b => b.id))
   const vids = new Set(L().versioni.filter(v => bids.has(v.brano_id)).map(v => v.id))
@@ -840,4 +848,74 @@ async function comprimi(testo) {
 async function decomprimi(b) {
   const bin = Uint8Array.from(atob(b.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
   return new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text()
+}
+
+// --- commenti di chi ascolta da un link (gli artisti), sul server Cloudflare ---
+// Il link si riconosce da k = SHA-256 di "bounces:" + indirizzo della scheda. Il produttore lo registra con un suo segreto
+// (in libreria.json, condivisione.segreto) che serve per cancellare. All'apertura dell'app i commenti nuovi entrano nella
+// libreria come commenti normali, col nome di chi li ha scritti (autore) e il loro id sul server (ospite).
+const Ospiti = {
+  attivo: () => !!COMMENTI_API,
+  async chiave(diretto) {
+    const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('bounces:' + diretto))
+    return Array.from(new Uint8Array(h), b => b.toString(16).padStart(2, '0')).join('')
+  },
+  async chiama(dove, corpo) {
+    const r = await fetch(COMMENTI_API + dove, corpo === undefined ? { cache: 'no-store' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { const e = new Error(j.error || 'commenti ' + r.status); e.codice = j.error; throw e }
+    return j
+  },
+  registrati: new Set(),
+  // dà un segreto alla condivisione (se non c'è) e registra il link sul server (una volta per apertura dell'app)
+  async registra(pid) {
+    if (!COMMENTI_API) return null
+    let c = trova('progetti', pid).condivisione
+    if (!c || !c.diretto) return null
+    if (!c.segreto) {
+      const seg = b64url(crypto.getRandomValues(new Uint8Array(24)))
+      Archivio.cambia(l => { const x = l.progetti.find(y => y.id === pid); if (x && x.condivisione && !x.condivisione.segreto) x.condivisione.segreto = seg })
+      c = trova('progetti', pid).condivisione
+    }
+    const k = await this.chiave(c.diretto)
+    if (!this.registrati.has(k)) { await this.chiama('link', { k, segreto: c.segreto }); this.registrati.add(k) }
+    return k
+  },
+  // porta nella libreria i commenti nuovi degli artisti; restituisce [{progetto, nome}] dei nuovi
+  async importa() {
+    if (!COMMENTI_API || !L()) return []
+    const nuovi = []
+    for (const p of L().progetti.filter(x => x.condivisione && x.condivisione.diretto)) {
+      try {
+        const k = await this.registra(p.id)
+        if (!k) continue
+        const { commenti } = await this.chiama('commenti?k=' + k)
+        const visto = p.condivisione.ultimo_ospite || 0
+        const vids = new Set(L().versioni.map(v => v.id))
+        const da = commenti.filter(m => m.id > visto && vids.has(m.v))
+        const max = Math.max(visto, ...commenti.map(m => m.id))
+        if (max === visto) continue
+        const voci = da.map(m => ({ id: nuovoId(), versione_id: m.v, secondi: m.s, testo: m.t, autore: m.n, ospite: m.id, creato: m.c }))
+        Archivio.cambia(l => {
+          const x = l.progetti.find(y => y.id === p.id)
+          if (!x || !x.condivisione) return
+          const gia = new Set(l.commenti.filter(m => m.ospite).map(m => m.ospite))
+          for (const v of voci) if (!gia.has(v.ospite) && l.versioni.some(y => y.id === v.versione_id)) l.commenti.push(v)
+          x.condivisione.ultimo_ospite = Math.max(x.condivisione.ultimo_ospite || 0, max)
+          if (voci.length) tocca(l, p.id)
+        })
+        for (const v of voci) nuovi.push({ progetto: p.titolo, nome: v.autore })
+      } catch (e) { console.warn('commenti di', p.titolo, e) }
+    }
+    return nuovi
+  },
+  // il produttore cancella un commento di un artista: via anche dal server (così l'artista non lo vede più)
+  async cancella(m) {
+    if (!COMMENTI_API) return
+    const v = L().versioni.find(x => x.id === m.versione_id), b = v && L().brani.find(x => x.id === v.brano_id)
+    const p = b && L().progetti.find(x => x.id === b.progetto_id), c = p && p.condivisione
+    if (!c || !c.diretto || !c.segreto) return
+    await this.chiama('cancella', { k: await this.chiave(c.diretto), id: m.ospite, segreto: c.segreto })
+  },
 }

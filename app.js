@@ -67,6 +67,8 @@ function quando(t) {
 const nBrani = n => n === 1 ? '1 brano' : `${n} brani`
 const bpmDi = v => v && (v.bpm || v.bpm_auto)
 const keyDi = v => v && (v.tonalita || v.tonalita_auto) || ''
+// "92 BPM · Am": per chi ascolta dal link, sotto il titolo (da telefono le colonne BPM e Tonalità non ci sono) e nel player
+const bpmKey = v => [bpmDi(v) && Math.round(bpmDi(v)) + ' BPM', keyDi(v)].filter(Boolean).join(' · ')
 
 // colori: quello di base di ogni sfumatura (per gli header), quello medio delle copertine vere calcolato al volo
 const COLORI = { 1: '#c4417f', 2: '#0b6fd8', 3: '#d99a12', 4: '#159e73', 5: '#e0867d', 6: '#6a62c0', 7: '#e0405c', 8: '#3a8394', 9: '#3b4c72', 10: '#c066d6' }
@@ -268,8 +270,9 @@ async function mostra() {
         try { scheda = await leggiScheda(d.m) }
         catch { S.ospite = null; return benvenuto('Questo link d’ascolto non è più attivo: chiedi un link nuovo a chi te l’ha mandato.') }
       }
-      S.ospite = { chiave: arg, scheda: d.m || null, lib: libOspite(scheda) }
+      S.ospite = { chiave: arg, scheda: d.m || null, lib: libOspite(scheda), k: null, commenti: null }
       S.lib = null; S.coda = []; S.i = -1; S.pann = null
+      commentiOspite()
     }
   } else {
     if (S.ospite) { S.ospite = null; S.lib = null; A.pause(); S.coda = []; S.i = -1 }
@@ -298,9 +301,9 @@ function benvenuto(msg = '') {
 // i dati di un link d'ascolto: {t: titolo, a: artista, s: sfondo, c: cover, b: [[titolo, url, durata, tonalità, bpm], ...]}
 function libOspite(d) {
   const ora = Date.now() / 1000
-  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista, pc, etichetta], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
+  const brani = (d.b || []).map(([titolo, url, durata, key, bpm, stato, artista, pc, etichetta, vr], i) => ({ id: i + 10, progetto_id: 1, titolo, artista: artista || '', ordine: i, creato: ora,
     picchi: pc ? [...pc].map(x => +x / 9) : null,
-    preferito: 0, versione_id: i + 1000, etichetta: etichetta || '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url }))
+    preferito: 0, versione_id: i + 1000, etichetta: etichetta || '', stato: stato || null, bpm: bpm || null, tonalita: key || null, durata, audio: 1, nver: 1, ncom: 0, url, vr: vr || null }))
   const p = { id: 1, titolo: d.t || 'Progetto', artista: d.a || '', nota: '', cover: d.c ? 'condivisa' : null, coverUrl: d.c, sfondo: d.s || 1,
     fissato: 0, cartella_id: null, creato: ora, modificato: ora, n_brani: brani.length, senza_audio: 0,
     durata: brani.reduce((s, b) => s + (b.durata || 0), 0) }
@@ -457,7 +460,7 @@ function rigaBrano(b, i, multi, ordinabile) {
   const off = !S.ospite && b.audio && Off.ha(b.versione_id), inArrivo = !off && !S.ospite && Off.scarica_.has(b.versione_id)
   return `<div class="tr ${b.audio ? '' : 'muto'} ${suonabile(b) ? '' : 'spento'} ${ora ? 'ora' : ''} ${S.scelta === b.id ? 'scelta' : ''}" data-b="${b.id}" ${ordinabile ? 'draggable="true"' : ''}>
     <span class="n">${suona ? '<span class="eq"><i></i><i></i><i></i></span>' : `<i>${i + 1}</i>`}${suonabile(b) ? `<button data-az="suona" title="Riproduci">${suona ? IC.pausa : IC.play}</button>` : ''}</span>
-    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${off ? `<span class="off-ic" title="Disponibile offline">${IC.offline}</span>` : inArrivo ? `<span class="off-ic arriva" title="Scarico per l’offline">${IC.offline}</span>` : ''}${esc(sotto)}</small></span></span>
+    <span class="tit">${multi ? coverHtml(p, 'mini') : ''}<span class="tt"><span class="riga-titolo"><b>${esc(x.nome)}</b>${S.ospite ? '' : `<button class="matita" data-az="rinomina" title="Rinomina">${IC.matita}</button>`}</span><small>${x.tag ? `<em class="tag">${esc(x.tag)}</em>` : ''}${b.audio ? '' : '<em class="senza">SENZA AUDIO</em>'}${off ? `<span class="off-ic" title="Disponibile offline">${IC.offline}</span>` : inArrivo ? `<span class="off-ic arriva" title="Scarico per l’offline">${IC.offline}</span>` : ''}${esc(sotto)}${S.ospite && bpmKey(b) ? `<span class="bk"> · ${esc(bpmKey(b))}</span>` : ''}</small></span></span>
     ${multi ? `<a class="prog" href="#/progetto/${p.id}">${esc(p.titolo)}</a>` : ''}
     <span class="ver">${S.ospite ? esc(b.etichetta || '') : `<input class="campo ver-num" data-etichetta-v="${b.versione_id}" value="${esc(b.etichetta || '')}" spellcheck="false" title="Numero di versione: scrivi 4 o V4"><span class="ver-et">${esc(b.etichetta || '')}</span>`}${S.ospite ? (b.stato ? ` <em class="stato" data-s="${b.stato}">${b.stato.toUpperCase()}</em>` : '') : sceltaStato(b.versione_id, b.stato)}</span>
     <span class="nasc ${b.bpm ? '' : 'auto'}">${bpmDi(b) ? Math.round(bpmDi(b)) : ''}</span>
@@ -725,7 +728,7 @@ function pannello() {
       <div class="commenti">${v.commenti.length ? v.commenti.map(m => `
         <div class="commento" data-c="${m.id}">
           ${m.secondi != null ? `<button class="tempo" data-t="${m.secondi}" title="Vai a questo punto">${tempo(m.secondi)}</button>` : '<span class="tempo senza-t">—</span>'}
-          <p>${esc(m.testo)}</p>
+          <p>${m.autore ? `<b class="autore-c">${esc(m.autore)}</b> ` : ''}${esc(m.testo)}</p>
           <button class="ic" data-az="elimina-commento" title="Elimina">${IC.chiudi}</button>
           <small>${quando(m.creato)}</small>
         </div>`).join('') : '<p class="muted" style="margin:0 8px 4px">Nessun commento. Mentre ascolti, scrivi qui: resta segnato il minuto.</p>'}</div>
@@ -963,7 +966,7 @@ function disegnaSchermo() {
   document.body.classList.toggle('schermo-aperto', aperto)
   if (!aperto) { schermoDisegnato = ''; return }
   const b = S.perBrano.get(c.bid), p = S.perId.get(c.pid), x = b ? S.info.get(b.id) : { nome: '', autori: [], interprete: '' }
-  const chiave = [c.vid, A.paused, S.casuale, S.loop, b && b.preferito, p && p.modificato, !!urlCover(p)].join('|')
+  const chiave = [c.vid, A.paused, S.casuale, S.loop, b && b.preferito, p && p.modificato, !!urlCover(p), S.ospite && S.ospite.commenti && commentiQui().length].join('|')
   if (chiave === schermoDisegnato) return tempiSchermo()  // niente da ridisegnare: solo i tempi
   schermoDisegnato = chiave
   el.style.setProperty('--c', coloreDi(p))
@@ -971,7 +974,7 @@ function disegnaSchermo() {
     <div class="sc-testa"><button class="ic" data-sc="chiudi" title="Chiudi">${IC.giu}</button>
       <div><small>${S.ospite ? 'In ascolto' : 'In riproduzione da'}</small><b>${esc(p ? p.titolo : '')}</b></div>${S.ospite ? '<span class="sc-vuoto"></span>' : `<button class="ic" data-sc="altro" title="Altro">${IC.altro}</button>`}</div>
     ${coverHtml(p, 'sc-cover')}
-    <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([maiu((b && b.artista) || x.interprete), ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}</span></div>
+    <div class="sc-titolo"><div><b>${esc(x.nome)}</b><span>${esc([maiu((b && b.artista) || x.interprete), ...x.autori].filter(Boolean).join(', ') || (p ? p.titolo : ''))}${b && b.nver > 1 && c.etichetta ? ' · ' + esc(c.etichetta) : ''}${S.ospite && b && bpmKey(b) ? ' · ' + esc(bpmKey(b)) : ''}</span></div>
       ${S.ospite ? '' : `<button class="ic cuore ${b && b.preferito ? 'on' : ''}" data-sc="cuore">${b && b.preferito ? IC.cuorePieno : IC.cuore}</button>`}</div>
     <div id="sc-barra"><div class="sc-binario"><div class="sc-pieno"></div></div></div>
     <div class="sc-tempi"><span id="sc-ora">0:00</span><span id="sc-tot">0:00</span></div>
@@ -982,7 +985,8 @@ function disegnaSchermo() {
       <button class="ic grande" data-sc="succ" title="Successivo">${IC.succ}</button>
       <button class="ic ${S.loop ? 'on' : ''}" data-sc="loop" title="Ripeti">${IC.loop}</button>
     </div>
-    ${S.ospite ? '' : `<button class="sc-dettagli" data-sc="dettagli"><b>Versioni, note e commenti</b>
+    ${S.ospite ? (S.ospite.commenti ? `<button class="sc-dettagli" data-sc="commenta"><b>${IC.commento} Commenta</b>
+      <span>${commentiQui().length ? nCommenti(commentiQui().length) + ' · ' : ''}Resta segnato il punto in cui sei</span></button>` : '') : `<button class="sc-dettagli" data-sc="dettagli"><b>Versioni, note e commenti</b>
       <span>${esc([c.etichetta, ((b && b.versione_id === c.vid ? b.stato : c.stato) || '').toUpperCase(), b && b.nver > 1 ? b.nver + ' versioni' : ''].filter(Boolean).join(' · ') || 'Apri il brano')}</span></button>`}`
   tempiSchermo()
 }
@@ -1006,6 +1010,7 @@ $('#schermo').addEventListener('click', e => {
   if (az === 'succ') return prossimo()
   if (az === 'casuale') return $('#pl-casuale').click()
   if (az === 'loop') return $('#pl-loop').click()
+  if (S.ospite && az === 'commenta') { e.stopPropagation(); return finestraCommento() }  // se no il clic arriva al documento e la chiude
   if (S.ospite && ['cuore', 'altro', 'dettagli'].includes(az)) return  // chi ascolta dal link: solo ascolto
   if (az === 'cuore') return cuore(c.bid)
   if (az === 'altro') return menuBrano(0, 0, c.bid)
@@ -1022,7 +1027,8 @@ $('#schermo').addEventListener('click', e => {
 
 function disegnaPunti() {
   const c = S.coda[S.i], d = A.duration || (c && c.durata) || 0
-  const cm = S.dett && c && S.dett.id === c.vid ? S.dett.commenti : []
+  const cm = S.ospite ? commentiQui().map(m => ({ secondi: m.s, testo: m.n + ': ' + m.t }))
+    : S.dett && c && S.dett.id === c.vid ? S.dett.commenti : []
   $('#barra-tempo .punti').innerHTML = d ? cm.filter(m => m.secondi != null)
     .map(m => `<i style="left:${Math.min(100, m.secondi / d * 100)}%" title="${tempo(m.secondi)} · ${esc(m.testo)}"></i>`).join('') : ''
 }
@@ -2072,6 +2078,8 @@ $('#pl-succ').innerHTML = IC.succ
 $('#pl-play').innerHTML = IC.play
 $('#pl-loop').innerHTML = IC.loop
 $('#pl-pannello').innerHTML = IC.pannello
+$('#pl-commenta').innerHTML = IC.commento
+$('#pl-commenta').addEventListener('click', e => { e.stopPropagation(); finestraCommento() })
 $('#pl-cuore').innerHTML = IC.cuore
 const schede = $$('#schede a span')
 schede[0].innerHTML = IC.casa
@@ -2133,9 +2141,10 @@ async function impostazioni() {
 // tornando sull'app (altra scheda, telefono riaperto): se un altro dispositivo ha cambiato qualcosa, si ricarica
 document.addEventListener('visibilitychange', async () => {
   if (document.hidden) return
-  if (S.ospite) return aggiornaOspite()
+  if (S.ospite) { commentiOspite(); return aggiornaOspite() }
   if (!Dbx.collegato()) return
   if (await Archivio.cambiataAltrove()) { await ricarica(); Off.sincronizza() }
+  commentiArtisti()
 })
 
 // senza rete: si riprova ogni 30 s e appena il telefono dice che la rete è tornata
@@ -2185,6 +2194,109 @@ window.addEventListener('beforeunload', e => {
     if (Archivio.senzaRete) avviso('Senza rete: suonano i brani scaricati')
     Off.sincronizza()
     togliCopieAscolto()
-    aggiornaSchede()  // i link già mandati prendono subito le novità della scheda (es. la V, 19/11)
+    aggiornaSchede().then(commentiArtisti)  // i link già mandati prendono subito le novità della scheda (es. la V, 19/11)
   }
 })()
+
+// --- commenti degli artisti (chi ascolta da un link), sul server Cloudflare: vedi Ospiti in archivio.js ---
+const nCommenti = n => n === 1 ? '1 commento' : n + ' commenti'
+// produttore: i commenti nuovi degli artisti entrano nella libreria; avviso con chi ha scritto
+async function commentiArtisti() {
+  if (S.ospite || !Ospiti.attivo() || Archivio.senzaRete) return
+  const nuovi = await Ospiti.importa().catch(() => [])
+  if (!nuovi.length) return
+  const nomi = [...new Set(nuovi.map(x => x.nome))], progetti = [...new Set(nuovi.map(x => x.progetto))]
+  avviso(`${nuovi.length === 1 ? 'Nuovo commento' : nuovi.length + ' commenti nuovi'} di ${nomi.join(', ')} su ${progetti.join(', ')}`)
+  await ricarica()
+}
+
+// chi ascolta: i commenti del link (null = commenti non attivi per questo link)
+async function commentiOspite() {
+  const o = S.ospite
+  if (!o || !o.scheda || !Ospiti.attivo()) return
+  try {
+    o.k = o.k || await Ospiti.chiave(o.scheda)
+    const { commenti } = await Ospiti.chiama('commenti?k=' + o.k)
+    if (S.ospite !== o) return
+    o.commenti = commenti
+  } catch { if (S.ospite === o) o.commenti = null }
+  document.body.classList.toggle('con-commenti', !!o.commenti)
+  schermoDisegnato = ''
+  disegnaSchermo()
+  disegnaPunti()
+}
+// i commenti della versione che suona
+function commentiQui() {
+  const c = S.coda[S.i], b = c && S.lib && S.lib.brani.find(x => x.versione_id === c.vid)
+  return S.ospite && S.ospite.commenti && b && b.vr ? S.ospite.commenti.filter(m => m.v === b.vr) : []
+}
+const miei = { get: () => { try { return JSON.parse(memo.get('bounces-miei-commenti') || '{}') } catch { return {} } },
+  set: o => memo.set('bounces-miei-commenti', JSON.stringify(o)) }
+
+// finestra "Commento a 1:23": il secondo è quello in cui si preme Commenta
+function finestraCommento() {
+  const o = S.ospite, c = S.coda[S.i], b = c && S.lib.brani.find(x => x.versione_id === c.vid)
+  if (!o || !o.commenti || !b) return
+  if (!b.vr) return avviso('Su questo brano i commenti non sono ancora attivi: chiedi a chi ti ha mandato il link di riaprire Bounces', true)
+  const secondi = Math.round(A.currentTime * 10) / 10, nome = memo.get('bounces-nome-ospite') || ''
+  const x = S.info.get(b.id)
+  chiudiMenu()
+  const m = document.createElement('div')
+  m.className = 'menu finestra commenta-ospite'
+  if (telefono()) { const fondo = document.createElement('div'); fondo.className = 'foglio-fondo'; document.body.append(fondo) }
+  const lista = () => {
+    const mm = commentiQui().slice().sort((a, z) => (a.s ?? -1) - (z.s ?? -1)), mie = miei.get()
+    return mm.length ? mm.map(k => `<div class="co-riga">
+        ${k.s != null ? `<button class="tempo" data-co-salta="${k.s}">${tempo(k.s)}</button>` : '<span class="tempo senza-t">—</span>'}
+        <p><b>${esc(k.n)}</b> ${esc(k.t)}</p>
+        ${mie[k.id] ? `<button class="ic" data-co-togli="${k.id}" title="Cancella il tuo commento">${IC.chiudi}</button>` : '<span></span>'}</div>`).join('')
+      : '<p class="muted">Ancora nessun commento su questo brano.</p>'
+  }
+  m.innerHTML = `<div class="titoletto">Commento a ${tempo(secondi)}</div>
+    <p>${esc(x ? x.nome : b.titolo)}${b.etichetta ? ' · ' + esc(b.etichetta) : ''}. Chi ti ha mandato il link lo vede nel brano, a questo punto preciso.</p>
+    <form class="co-form">
+      <input name="nome" placeholder="Il tuo nome" maxlength="40" autocomplete="name" value="${esc(nome)}" ${nome ? 'hidden' : ''}>
+      <input name="testo" placeholder="Scrivi un commento" maxlength="1000" autocomplete="off">
+      <div class="fila-c"><button class="btn pieno">Invia</button><button type="button" class="btn" data-co-chiudi>Chiudi</button></div>
+    </form>
+    <div class="co-lista">${lista()}</div>`
+  document.body.append(m)
+  const f = $('.co-form', m)
+  ;(nome ? f.testo : f.nome).focus()
+  m.addEventListener('click', async e => {
+    const t = e.target
+    if (t.closest('[data-co-chiudi]')) return chiudiMenu()
+    const sa = t.closest('[data-co-salta]')
+    if (sa) return salta(+sa.dataset.coSalta)
+    const to = t.closest('[data-co-togli]')
+    if (to) {
+      const id = +to.dataset.coTogli, mie = miei.get()
+      try {
+        await Ospiti.chiama('cancella', { k: o.k, id, chiave: mie[id] })
+        delete mie[id]; miei.set(mie)
+        o.commenti = o.commenti.filter(k => k.id !== id)
+        $('.co-lista', m).innerHTML = lista(); schermoDisegnato = ''; disegnaSchermo(); disegnaPunti()
+      } catch { avviso('Non sono riuscito a cancellarlo', true) }
+    }
+  })
+  f.addEventListener('submit', async e => {
+    e.preventDefault()
+    const n = f.nome.value.trim(), testo = f.testo.value.trim()
+    if (!n) { f.nome.hidden = false; return f.nome.focus() }
+    if (!testo) return f.testo.focus()
+    const bt = $('button.pieno', f)
+    bt.disabled = true
+    try {
+      const r = await Ospiti.chiama('commenti', { k: o.k, v: b.vr, s: secondi, t: testo, n })
+      memo.set('bounces-nome-ospite', n)
+      const mie = miei.get(); mie[r.id] = r.chiave; miei.set(mie)
+      o.commenti.push({ id: r.id, v: b.vr, s: secondi, t: testo, n, c: r.creato })
+      chiudiMenu()
+      avviso('Commento inviato')
+      schermoDisegnato = ''; disegnaSchermo(); disegnaPunti()
+    } catch (err) {
+      bt.disabled = false
+      avviso(err.codice === 'RATE' ? 'Troppi commenti di fila: riprova tra un po’' : 'Commento non inviato: controlla la connessione', true)
+    }
+  })
+}
